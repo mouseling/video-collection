@@ -36,6 +36,22 @@ jobs:
         uses: dotnet/nbgv@master
         id: nbgv
 
+      - name: Resolve release version
+        # A tag push must produce exactly the version it names. nbgv derives its version from
+        # version.json plus commit height, which does NOT match the tag — left to itself it
+        # publishes under a different tag than the one that triggered the run, stranding the
+        # original. So the pushed tag wins, and nbgv is only the fallback for manual runs.
+        id: ver
+        shell: pwsh
+        run: |
+          if ("${{ github.ref_type }}" -eq "tag") {
+            $v = "${{ github.ref_name }}" -replace '^v', ''
+          } else {
+            $v = "${{ steps.nbgv.outputs.SemVer2 }}"
+          }
+          Write-Host "release version: $v"
+          "version=$v" >> $env:GITHUB_OUTPUT
+
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v5
         with:
@@ -54,7 +70,7 @@ jobs:
             --self-contained true `
             /p:DebugType=None `
             /p:DebugSymbols=false `
-            /p:Version=${{ steps.nbgv.outputs.SemVer2 }} `
+            /p:Version=${{ steps.ver.outputs.version }} `
             /p:FileVersion=${{ steps.nbgv.outputs.AssemblyFileVersion }} `
             /p:AssemblyVersion=${{ steps.nbgv.outputs.AssemblyVersion }} `
             -o out
@@ -82,7 +98,7 @@ jobs:
         run: |
           vpk pack `
             --packId github.mouseling.videocollection `
-            --packVersion "${{ steps.nbgv.outputs.SemVer2 }}" `
+            --packVersion "${{ steps.ver.outputs.version }}" `
             --packDir "out" `
             --mainExe "VideoCollectionManager.exe" `
             --packTitle "Video Collection Manager" `
@@ -95,7 +111,7 @@ jobs:
           vpk upload github `
             --repoUrl "https://github.com/${{ github.repository }}" `
             --publish `
-            --releaseName "v${{ steps.nbgv.outputs.SemVer2 }}" `
-            --tag "v${{ steps.nbgv.outputs.SemVer2 }}" `
+            --releaseName "v${{ steps.ver.outputs.version }}" `
+            --tag "v${{ steps.ver.outputs.version }}" `
             --targetCommitish "${{ github.sha }}" `
             --token "$env:GITHUB_TOKEN"
