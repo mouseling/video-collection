@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Vcm.Core/Vcm.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="LibVLCSharp" Version="3.10.2" />
+    <!-- Windows ships its own libvlc; on Linux we use the runtime in .devtools (dev only). -->
+    <PackageReference Include="VideoLAN.LibVLC.Windows" Version="3.0.21" Condition="'$(VcmSkipWindowsVlc)' != 'true'" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>   <!-- WinExe = no console window on Windows; runs normally on Linux -->
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>VideoCollectionManager</AssemblyName>
+    <RootNamespace>Vcm.App</RootNamespace>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+
+    <!--
+      Do NOT publish this as a single file. VideoLAN.LibVLC.Windows contributes libvlc plus ~320
+      plugin DLLs as content under libvlc/win-x64/, and that is exactly where libvlc looks for them
+      at runtime. PublishSingleFile + IncludeNativeLibrariesForSelfExtract sweeps those DLLs into
+      the executable, leaving the directory on disk holding only lua scripts and headers — the app
+      then starts but can play nothing. Publish to a folder instead.
+    -->
+    <PublishSingleFile>false</PublishSingleFile>
+
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.3.18" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.3.18" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.18" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.18" />
+    <PackageReference Include="Avalonia.Diagnostics" Version="11.3.18" Condition="'$(Configuration)' == 'Debug'" />
+    <PackageReference Include="LibVLCSharp.Avalonia" Version="3.10.2" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Vcm.Core/Vcm.Core.csproj" />
+    <ProjectReference Include="../Vcm.Media/Vcm.Media.csproj" />
+  </ItemGroup>
+
+  <!--
+    The package drops a full 96 MB x86 copy of VLC alongside the x64 one. Its own
+    VlcWindowsX86Enabled switch does not take effect when cross-publishing, so remove the
+    directory outright — a win-x64 build can never load it.
+  -->
+  <Target Name="RemoveVlcX86" AfterTargets="Publish">
+    <RemoveDir Directories="$(PublishDir)libvlc/win-x86" ContinueOnError="true" />
+  </Target>
+
+</Project>

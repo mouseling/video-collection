@@ -1,0 +1,39 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Vcm.App.AddPathDialog"
+        x:CompileBindings="True"
+        Width="620" SizeToContent="Height"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        Title="Add root folder"
+        Background="{StaticResource Deep}"
+        FontFamily="Inter, Segoe UI, sans-serif">
+
+  <StackPanel Margin="24,20,24,20" Spacing="14">
+    <StackPanel Spacing="4">
+      <TextBlock Text="Add a root folder" Foreground="{StaticResource Text}"
+                 FontSize="16" FontWeight="SemiBold"/>
+      <TextBlock Text="Paste a path or browse to it. Subfolders are scanned too."
+                 Foreground="{StaticResource Faint}" FontSize="12"/>
+    </StackPanel>
+
+    <Grid ColumnDefinitions="*,Auto" >
+      <Border Grid.Column="0" Background="#13161C" BorderBrush="{StaticResource Line}"
+              BorderThickness="1" CornerRadius="7" Padding="2" Margin="0,0,8,0">
+        <TextBox Name="PathBox" Watermark="D:\Videos" BorderThickness="0"
+                 Background="Transparent" FontSize="13" Padding="10,8"
+                 Foreground="{StaticResource Text}"/>
+      </Border>
+      <Button Grid.Column="1" Name="BrowseButton" Classes="tool" Content="Browse…"
+              VerticalAlignment="Stretch"/>
+    </Grid>
+
+    <TextBlock Name="ErrorText" Foreground="{StaticResource Bad}" FontSize="12"
+               IsVisible="False" TextWrapping="Wrap"/>
+
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+      <Button Name="CancelButton" Classes="tool" Content="Cancel"/>
+      <Button Name="AddButton" Classes="primary" Content="Add folder"/>
+    </StackPanel>
+  </StackPanel>
+</Window>

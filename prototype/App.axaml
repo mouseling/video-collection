@@ -1,0 +1,190 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Vcm.Prototype.App">
+  <Application.Resources>
+    <SolidColorBrush x:Key="Deep"      Color="#0E1014"/>
+    <SolidColorBrush x:Key="Panel"     Color="#15181F"/>
+    <SolidColorBrush x:Key="Raised"    Color="#1B1F28"/>
+    <SolidColorBrush x:Key="Line"      Color="#262B36"/>
+    <SolidColorBrush x:Key="Text"      Color="#E6E9EF"/>
+    <SolidColorBrush x:Key="Dim"       Color="#8A92A6"/>
+    <SolidColorBrush x:Key="Faint"     Color="#5A6275"/>
+    <SolidColorBrush x:Key="Accent"    Color="#5B8CFF"/>
+    <SolidColorBrush x:Key="AccentSoft" Color="#1E2A47"/>
+    <SolidColorBrush x:Key="Good"      Color="#4ED08A"/>
+    <SolidColorBrush x:Key="Bad"       Color="#F26E6E"/>
+    <SolidColorBrush x:Key="Hot"       Color="#FFC46B"/>
+  </Application.Resources>
+
+  <Application.Styles>
+    <FluentTheme />
+
+    <!-- Left-hand navigation -->
+    <Style Selector="ListBox.nav">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+    </Style>
+    <Style Selector="ListBox.nav ListBoxItem">
+      <Setter Property="Padding" Value="14,0"/>
+      <Setter Property="Height" Value="38"/>
+      <Setter Property="Margin" Value="8,1"/>
+      <Setter Property="CornerRadius" Value="7"/>
+      <Setter Property="Foreground" Value="{StaticResource Dim}"/>
+      <Setter Property="FontSize" Value="13.5"/>
+    </Style>
+    <Style Selector="ListBox.nav ListBoxItem:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="#1B1F28"/>
+      <Setter Property="CornerRadius" Value="7"/>
+    </Style>
+    <Style Selector="ListBox.nav ListBoxItem:selected /template/ ContentPresenter">
+      <Setter Property="Background" Value="#1E2A47"/>
+      <Setter Property="CornerRadius" Value="7"/>
+    </Style>
+    <Style Selector="ListBox.nav ListBoxItem:selected">
+      <Setter Property="Foreground" Value="#E6E9EF"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+
+    <!-- Data rows -->
+    <Style Selector="ListBox.rows">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+    </Style>
+    <Style Selector="ListBox.rows ListBoxItem">
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="Margin" Value="0"/>
+      <Setter Property="MinHeight" Value="0"/>
+    </Style>
+    <Style Selector="ListBox.rows ListBoxItem:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="#1B1F28"/>
+    </Style>
+    <Style Selector="ListBox.rows ListBoxItem:selected /template/ ContentPresenter">
+      <Setter Property="Background" Value="#1E2A47"/>
+    </Style>
+
+    <!-- Column headers -->
+    <Style Selector="TextBlock.colhead">
+      <Setter Property="Foreground" Value="{StaticResource Faint}"/>
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+
+    <Style Selector="TextBlock.cell">
+      <Setter Property="Foreground" Value="{StaticResource Text}"/>
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+    </Style>
+    <Style Selector="TextBlock.cell.dim">
+      <Setter Property="Foreground" Value="{StaticResource Dim}"/>
+      <Setter Property="FontSize" Value="12"/>
+    </Style>
+    <Style Selector="TextBlock.num">
+      <Setter Property="FontFamily" Value="Consolas,Menlo,monospace"/>
+      <Setter Property="FontSize" Value="12.5"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="HorizontalAlignment" Value="Right"/>
+      <Setter Property="Foreground" Value="{StaticResource Text}"/>
+    </Style>
+
+    <!-- Segmented sort switch -->
+    <Style Selector="RadioButton.seg">
+      <Setter Property="Foreground" Value="{StaticResource Dim}"/>
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="Padding" Value="11,5"/>
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border Name="b" Background="Transparent" CornerRadius="6" Padding="{TemplateBinding Padding}">
+            <ContentPresenter Content="{TemplateBinding Content}"
+                              Foreground="{TemplateBinding Foreground}"
+                              FontSize="{TemplateBinding FontSize}"/>
+          </Border>
+        </ControlTemplate>
+      </Setter>
+    </Style>
+    <Style Selector="RadioButton.seg:pointerover /template/ Border#b">
+      <Setter Property="Background" Value="#222734"/>
+    </Style>
+    <Style Selector="RadioButton.seg:checked /template/ Border#b">
+      <Setter Property="Background" Value="#5B8CFF"/>
+    </Style>
+    <Style Selector="RadioButton.seg:checked">
+      <Setter Property="Foreground" Value="#FFFFFF"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+
+    <!-- Toolbar / player buttons -->
+    <Style Selector="Button.tool">
+      <Setter Property="Background" Value="#1B1F28"/>
+      <Setter Property="Foreground" Value="{StaticResource Text}"/>
+      <Setter Property="BorderBrush" Value="{StaticResource Line}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="7"/>
+      <Setter Property="Padding" Value="12,7"/>
+      <Setter Property="FontSize" Value="12.5"/>
+    </Style>
+    <Style Selector="Button.tool:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="#242A36"/>
+      <Setter Property="BorderBrush" Value="#39414F"/>
+    </Style>
+
+    <Style Selector="Button.primary">
+      <Setter Property="Background" Value="{StaticResource Accent}"/>
+      <Setter Property="Foreground" Value="#FFFFFF"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="CornerRadius" Value="7"/>
+      <Setter Property="Padding" Value="13,7"/>
+      <Setter Property="FontSize" Value="12.5"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <Style Selector="Button.primary:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="#74A0FF"/>
+    </Style>
+
+    <!-- Tag chips. A single-selection ListBox, so picking a tag releases the previous one. -->
+    <Style Selector="ListBox.chips">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Padding" Value="0"/>
+    </Style>
+    <Style Selector="ListBox.chips ListBoxItem">
+      <Setter Property="Foreground" Value="{StaticResource Dim}"/>
+      <Setter Property="FontSize" Value="12.5"/>
+      <Setter Property="Padding" Value="13,6"/>
+      <Setter Property="Margin" Value="0,0,8,8"/>
+      <Setter Property="MinHeight" Value="0"/>
+    </Style>
+    <Style Selector="ListBox.chips ListBoxItem /template/ ContentPresenter">
+      <Setter Property="Background" Value="#1B1F28"/>
+      <Setter Property="BorderBrush" Value="#262B36"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="13"/>
+    </Style>
+    <Style Selector="ListBox.chips ListBoxItem:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="#242A36"/>
+      <Setter Property="BorderBrush" Value="#39414F"/>
+    </Style>
+    <Style Selector="ListBox.chips ListBoxItem:selected /template/ ContentPresenter">
+      <Setter Property="Background" Value="#5B8CFF"/>
+      <Setter Property="BorderBrush" Value="#5B8CFF"/>
+    </Style>
+    <Style Selector="ListBox.chips ListBoxItem:selected">
+      <Setter Property="Foreground" Value="#FFFFFF"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+
+    <Style Selector="TreeView">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+    </Style>
+    <Style Selector="TreeViewItem">
+      <Setter Property="Foreground" Value="{StaticResource Text}"/>
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="MinHeight" Value="30"/>
+    </Style>
+    <Style Selector="TreeViewItem:selected /template/ Border#PART_LayoutRoot">
+      <Setter Property="Background" Value="#1E2A47"/>
+    </Style>
+  </Application.Styles>
+</Application>

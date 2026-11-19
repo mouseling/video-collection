@@ -1,0 +1,21 @@
+# Build output
+bin/
+obj/
+publish/
+*.user
+
+# Local library databases (created at runtime under %AppData%; these are stray dev copies)
+*.db
+*.db-wal
+*.db-shm
+
+# Sample media — 280 MB of downloadable open-licensed clips. Recreate with scripts/fetch-testdata.sh
+testdata/**
+!testdata/README.md
+
+# Linux development VLC runtime, unpacked from Ubuntu packages. Recreate with scripts/setup-linux-dev.sh
+.devtools/
+
+# Generated UI screenshots
+shots/
+shots-app/
