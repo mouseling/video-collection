@@ -27,17 +27,19 @@ public partial class MainWindow : Window
     private Grid[] _pages = [];
     private FolderRow? _selectedFolder;
     private CancellationTokenSource? _scanCts;
+    private Updater? _updater;
     private const int HeatBuckets = 240;
 
     public MainWindow()
     {
-        _db = Database.OpenDefault();
+        _db = new Database(AppPaths.LibraryDbPath);
         _library = new Library(_db);
 
         AvaloniaXamlLoader.Load(this);
         Wire();
         StartEngine();
         RefreshAll();
+        StartUpdateCheck();
     }
 
     // ------------------------------------------------------------------ setup
@@ -62,6 +64,7 @@ public partial class MainWindow : Window
         C<ListBox>("TagChips").ItemsSource = _tagChips;
         C<ItemsControl>("DupeList").ItemsSource = _dupes;
 
+        C<Button>("UpdateButton").Click += (_, _) => ApplyUpdate();
         C<Button>("AddPathButton").Click += OnAddPath;
         C<Button>("RescanButton").Click += (_, _) => StartScan();
         C<Button>("RemoveRootButton").Click += OnRemoveRoot;
@@ -397,6 +400,56 @@ public partial class MainWindow : Window
         rb.IsCheckedChanged += (_, _) => { if (rb.IsChecked == true) onChecked(); };
     }
 
+    // ------------------------------------------------------------------ updates
+
+    /// <summary>
+    /// Asks GitHub for a newer release in the background. Silent when there is none, when the
+    /// machine is offline, or when this is not a Velopack deployment (a dev run).
+    /// </summary>
+    private void StartUpdateCheck()
+    {
+        _updater = Updater.TryCreate();
+        if (_updater is null) return;
+
+        Task.Run(async () =>
+        {
+            var version = await _updater.CheckAsync();
+            if (version is null) return;
+
+            Dispatcher.UIThread.Post(() =>
+            {
+                var button = C<Button>("UpdateButton");
+                button.Content = $"Update to {version}";
+                button.IsVisible = true;
+                SetStatus($"version {version} is available");
+            });
+        });
+    }
+
+    private void ApplyUpdate()
+    {
+        if (_updater is not { HasPendingUpdate: true }) return;
+
+        var button = C<Button>("UpdateButton");
+        button.IsEnabled = false;
+        button.Content = "Downloading…";
+        SetStatus("downloading update…");
+
+        Task.Run(async () =>
+        {
+            // Teardown persists the open viewing session; ApplyAsync then replaces the process.
+            var ok = await _updater.ApplyAsync(() => Dispatcher.UIThread.Invoke(Teardown));
+            if (ok) return;
+
+            Dispatcher.UIThread.Post(() =>
+            {
+                button.IsEnabled = true;
+                button.Content = $"Update to {_updater.PendingVersion}";
+                SetStatus("update download failed — will retry next launch");
+            });
+        });
+    }
+
     // ------------------------------------------------------------------ player bar
 
     private void OnTrackChanged(VideoStats? video)
@@ -510,8 +563,13 @@ public partial class MainWindow : Window
         return null;
     }
 
+    private bool _torndown;
+
     private void Teardown()
     {
+        if (_torndown) return;
+        _torndown = true;
+
         _scanCts?.Cancel();
         _engine?.ShutdownForExit();   // finalises the open session so its watch time is kept
         _db.Dispose();

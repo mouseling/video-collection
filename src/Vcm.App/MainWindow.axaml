@@ -42,10 +42,15 @@
 
         <Border Grid.Row="3" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0"
                 Padding="18,13">
-          <StackPanel>
-            <TextBlock Text="STATUS" Classes="colhead"/>
-            <TextBlock Name="StatusText" Text="idle" Foreground="{StaticResource Dim}"
-                       FontSize="11.5" Margin="0,3,0,0" TextWrapping="Wrap"/>
+          <StackPanel Spacing="10">
+            <Button Name="UpdateButton" Classes="primary" IsVisible="False"
+                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                    Content="Update available"/>
+            <StackPanel>
+              <TextBlock Text="STATUS" Classes="colhead"/>
+              <TextBlock Name="StatusText" Text="idle" Foreground="{StaticResource Dim}"
+                         FontSize="11.5" Margin="0,3,0,0" TextWrapping="Wrap"/>
+            </StackPanel>
           </StackPanel>
         </Border>
       </Grid>

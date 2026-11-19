@@ -45,6 +45,33 @@ process dies. `MediaReaper` parks them and releases them a few seconds later. Li
 uses `PlayerEngine.ShutdownForExit()`, which persists the session but leaves the native objects to
 the OS; disposing them during teardown segfaults.
 
+## Releases and self-update
+
+Velopack, same shape as the radar. Three rules:
+
+1. **Windows packages can only be built on Windows.** The Linux `vpk` build exposes nothing but
+   the AppImage packer, so `.github/workflows/release.yml` runs on `windows-latest`. Don't try to
+   pack a release locally.
+2. **Portable is still self-updating.** Velopack's `IsInstalled` means "running from a Velopack
+   layout", not "installed by Setup.exe" — the portable zip qualifies. `IsPortable` is the separate
+   flag. We ship only the portable zip; there is deliberately no installer.
+3. **Never store data beside the executable.** Updates replace `current\` wholesale. `AppPaths`
+   puts `library.db` in the Velopack app root (next to `Update.exe`) so it survives updates and
+   travels with the folder.
+
+The repo is **private**, so the shipped binary needs a read-only PAT baked in by the
+`GenerateUpdaterSecrets` target — from `UPDATER_TOKEN` in CI, or an untracked `updater.token` at
+the repo root locally. Absent, the constant compiles to `""`, the app runs fine, and every update
+check quietly 404s. `updater.token` is gitignored; never commit it.
+
+`VelopackApp.Build().Run()` must stay the first statement in `Main`, ahead of any Avalonia call —
+it is what finishes an update and re-launches.
+
+The release workflow fails the build if `libvlc/win-x64` carries fewer than 2 core DLLs or 100
+plugins. That guard exists because single-file publishing silently hides them inside the exe and
+the app then starts but decodes nothing — a failure mode that looks fine until someone presses
+play.
+
 ## Data model
 
 Identity is the **content hash** (size + first and last 1 MiB), never the path — one `videos` row

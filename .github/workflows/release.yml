@@ -1,0 +1,105 @@
+name: Release
+
+# Velopack packages for Windows can only be produced on Windows — the Linux vpk build ships
+# nothing but the AppImage packer — so this runs on a Windows runner.
+#
+# Deliberately NOT triggered by every push to main: each release carries a ~207 MB payload
+# (libvlc and its 320 plugins), so cutting one per commit would burn storage fast. Tag a release
+# when you want one, or start it by hand. To match the radar's behaviour instead, swap the `tags`
+# trigger below for `branches: [main]` with `paths: ['src/**']`.
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release:
+    name: Build and publish
+    if: github.repository_owner == 'mouseling'   # packId below is tied to this owner
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0          # nbgv needs the full history to compute a version
+
+      - name: Get version info
+        uses: dotnet/nbgv@master
+        id: nbgv
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Install Velopack CLI
+        run: dotnet tool install -g vpk
+
+      - name: Publish
+        env:
+          # Read-only PAT letting the shipped app query this PRIVATE repo's releases. Baked into
+          # the binary by the GenerateUpdaterSecrets target in Vcm.App.csproj. Add it under
+          # Settings -> Secrets and variables -> Actions as UPDATER_TOKEN. Without it the build
+          # still succeeds, but the released app can never see an update.
+          UPDATER_TOKEN: ${{ secrets.UPDATER_TOKEN }}
+        run: |
+          dotnet publish src/Vcm.App/Vcm.App.csproj `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            /p:DebugType=None `
+            /p:DebugSymbols=false `
+            /p:Version=${{ steps.nbgv.outputs.SemVer2 }} `
+            /p:FileVersion=${{ steps.nbgv.outputs.AssemblyFileVersion }} `
+            /p:AssemblyVersion=${{ steps.nbgv.outputs.AssemblyVersion }} `
+            -o out
+
+      - name: Sanity check the VLC payload
+        # Single-file publishing silently hides these DLLs inside the exe and playback dies while
+        # the app still starts. Fail the release here rather than ship a player that cannot decode.
+        shell: pwsh
+        run: |
+          $plugins = (Get-ChildItem -Recurse out/libvlc/win-x64/plugins -Filter *.dll -ErrorAction SilentlyContinue).Count
+          $core    = (Get-ChildItem out/libvlc/win-x64/libvlc*.dll -ErrorAction SilentlyContinue).Count
+          Write-Host "libvlc core dlls: $core, plugins: $plugins"
+          if ($core -lt 2 -or $plugins -lt 100) { throw "libvlc payload missing - refusing to release" }
+
+      - name: Download previous releases
+        continue-on-error: true   # expected to fail on the very first release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          vpk download github `
+            --repoUrl "https://github.com/${{ github.repository }}" `
+            --token "$env:GITHUB_TOKEN"
+
+      - name: Pack
+        run: |
+          vpk pack `
+            --packId github.mouseling.videocollection `
+            --packVersion "${{ steps.nbgv.outputs.SemVer2 }}" `
+            --packDir "out" `
+            --mainExe "VideoCollectionManager.exe" `
+            --packTitle "Video Collection Manager" `
+            --packAuthors "mouseling"
+
+      - name: Upload to GitHub Releases
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          vpk upload github `
+            --repoUrl "https://github.com/${{ github.repository }}" `
+            --publish `
+            --releaseName "v${{ steps.nbgv.outputs.SemVer2 }}" `
+            --tag "v${{ steps.nbgv.outputs.SemVer2 }}" `
+            --targetCommitish "${{ github.sha }}" `
+            --token "$env:GITHUB_TOKEN"

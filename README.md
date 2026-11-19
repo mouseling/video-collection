@@ -47,7 +47,46 @@ its 320 plugins. **Do not turn on single-file publishing** — it pulls those pl
 executable, where libvlc cannot find them, and the app then starts but can decode nothing. The
 project pins `PublishSingleFile` to false so this is hard to do by accident.
 
-The library lives at `%AppData%\VideoCollectionManager\library.db`.
+## Installing and updating
+
+There is **no installer**. Download `…-Portable.zip` from the
+[Releases page](https://github.com/mouseling/video-collection/releases), unzip it anywhere — a
+disk, a stick, wherever — and run `VideoCollectionManager.exe`. Nothing is written to the registry
+and nothing lands in Program Files.
+
+It still updates itself. On launch it asks GitHub whether a newer release exists; if so an
+**Update to x.y.z** button appears at the bottom of the sidebar. Press it and the app downloads the
+difference, restarts, and comes back on the new version. Velopack ships deltas, so after the first
+download later updates transfer only what actually changed rather than the full ~207 MB.
+
+Being offline is not an error: the check fails silently and the app carries on.
+
+### Where the library lives
+
+| Running as | Database |
+|---|---|
+| Portable release | `library.db` in the unzipped folder, beside `Update.exe` |
+| Dev build / plain publish | `%AppData%\VideoCollectionManager\library.db` |
+
+The portable database sits in the folder root rather than next to the executable on purpose:
+updates replace the inner `current\` directory wholesale, so anything stored beside the exe would
+be destroyed on every update. Keeping it in the root means your ratings and watch history survive
+updates *and* travel with the folder if you move it.
+
+### Cutting a release
+
+Releases are built by `.github/workflows/release.yml` on a Windows runner — Velopack cannot
+produce Windows packages from Linux. Push a tag:
+
+```bash
+git tag v0.1.1 && git push origin v0.1.1
+```
+
+One-time setup: add a **read-only** PAT as the `UPDATER_TOKEN` repository secret
+(Settings → Secrets and variables → Actions). The build bakes it into the binary so the shipped
+app can query this private repo's releases. Without it the app builds and runs but never sees an
+update. For local release builds, put the same value in an untracked `updater.token` at the
+repository root.
 
 ### Developing on Linux
 

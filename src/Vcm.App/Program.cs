@@ -1,4 +1,5 @@
 using Avalonia;
+using Velopack;
 
 namespace Vcm.App;
 
@@ -10,6 +11,12 @@ internal static class Program
     [STAThread]
     public static void Main(string[] args)
     {
+        // Must run before anything else. On first launch after an update Velopack uses this to
+        // finish installing and then re-launches, so no UI may be created ahead of it. Outside a
+        // Velopack deployment it is a no-op, which is the normal case during development.
+        try { VelopackApp.Build().Run(); }
+        catch { /* not deployed by Velopack */ }
+
         var i = Array.IndexOf(args, "--shot");
         if (i >= 0)
         {
