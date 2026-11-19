@@ -82,11 +82,8 @@ produce Windows packages from Linux. Push a tag:
 git tag v0.1.1 && git push origin v0.1.1
 ```
 
-One-time setup: add a **read-only** PAT as the `UPDATER_TOKEN` repository secret
-(Settings → Secrets and variables → Actions). The build bakes it into the binary so the shipped
-app can query this private repo's releases. Without it the app builds and runs but never sees an
-update. For local release builds, put the same value in an untracked `updater.token` at the
-repository root.
+No secrets or tokens are needed. The repository is public, so the shipped app reads its own
+releases anonymously and nothing has to be embedded in the binary.
 
 ### Developing on Linux
 

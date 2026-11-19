@@ -45,12 +45,8 @@ jobs:
         run: dotnet tool install -g vpk
 
       - name: Publish
-        env:
-          # Read-only PAT letting the shipped app query this PRIVATE repo's releases. Baked into
-          # the binary by the GenerateUpdaterSecrets target in Vcm.App.csproj. Add it under
-          # Settings -> Secrets and variables -> Actions as UPDATER_TOKEN. Without it the build
-          # still succeeds, but the released app can never see an update.
-          UPDATER_TOKEN: ${{ secrets.UPDATER_TOKEN }}
+        # No credentials are needed anywhere here: the repository is public, so the shipped app
+        # reads its own releases anonymously and nothing has to be embedded in the binary.
         run: |
           dotnet publish src/Vcm.App/Vcm.App.csproj `
             -c Release `

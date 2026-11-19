@@ -59,10 +59,11 @@ Velopack, same shape as the radar. Three rules:
    puts `library.db` in the Velopack app root (next to `Update.exe`) so it survives updates and
    travels with the folder.
 
-The repo is **private**, so the shipped binary needs a read-only PAT baked in by the
-`GenerateUpdaterSecrets` target — from `UPDATER_TOKEN` in CI, or an untracked `updater.token` at
-the repo root locally. Absent, the constant compiles to `""`, the app runs fine, and every update
-check quietly 404s. `updater.token` is gitignored; never commit it.
+The repo is **public**, deliberately, so the updater needs no credentials at all. The private-repo
+alternative would mean embedding a read-only PAT in the shipped binary, recoverable by anyone
+holding it, and silently 404ing on every check whenever it is missing or misscoped. If the repo
+ever goes private, that plumbing has to come back — see the radar's `GenerateUpdaterSecrets`
+target for the pattern.
 
 `VelopackApp.Build().Run()` must stay the first statement in `Main`, ahead of any Avalonia call —
 it is what finishes an update and re-launches.

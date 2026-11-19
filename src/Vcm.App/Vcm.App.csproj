@@ -43,28 +43,4 @@
   <Target Name="RemoveVlcX86" AfterTargets="Publish">
     <RemoveDir Directories="$(PublishDir)libvlc/win-x86" ContinueOnError="true" />
   </Target>
-
-  <!--
-    Bakes the updater's read-only PAT into the binary from an UNTRACKED file (updater.token at the
-    repository root, gitignored), so the value never lives in committed source. CI injects it via
-    the UPDATER_TOKEN environment variable instead, which is why env wins over the file. If neither
-    is present the constant compiles to "" and the updater runs token-less — correct for a public
-    repo, but this repo is private, so a release built without the token cannot self-update.
-  -->
-  <Target Name="GenerateUpdaterSecrets" BeforeTargets="CoreCompile">
-    <PropertyGroup>
-      <UpdaterTokenFile>$(MSBuildProjectDirectory)\..\..\updater.token</UpdaterTokenFile>
-      <UpdaterTokenValue Condition="'$(UPDATER_TOKEN)' != ''">$(UPDATER_TOKEN)</UpdaterTokenValue>
-      <UpdaterTokenValue Condition="'$(UpdaterTokenValue)' == '' AND Exists('$(UpdaterTokenFile)')">$([System.IO.File]::ReadAllText('$(UpdaterTokenFile)').Trim())</UpdaterTokenValue>
-      <UpdaterTokenLiteral Condition="'$(UpdaterTokenValue)' != ''">"$(UpdaterTokenValue)"</UpdaterTokenLiteral>
-      <UpdaterTokenLiteral Condition="'$(UpdaterTokenValue)' == ''">""</UpdaterTokenLiteral>
-      <UpdaterSecretsFile>$(IntermediateOutputPath)UpdaterSecrets.g.cs</UpdaterSecretsFile>
-    </PropertyGroup>
-    <WriteLinesToFile File="$(UpdaterSecretsFile)" Overwrite="true" WriteOnlyWhenDifferent="true"
-                      Lines="namespace Vcm.App { internal static class UpdaterSecrets { public const string Token = $(UpdaterTokenLiteral)%3B } }" />
-    <ItemGroup>
-      <Compile Include="$(UpdaterSecretsFile)" />
-    </ItemGroup>
-  </Target>
-
 </Project>

@@ -6,9 +6,8 @@ out/
 Releases/
 *.user
 
-# Read-only PAT baked into release builds by the GenerateUpdaterSecrets target. Never commit it;
-# CI supplies the same value through the UPDATER_TOKEN secret instead.
-updater.token
+# Defensive: the public repo needs no credentials, but never let a token file slip in.
+*.token
 
 # Local library databases (created at runtime under %AppData%; these are stray dev copies)
 *.db

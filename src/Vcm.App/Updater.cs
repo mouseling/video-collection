@@ -6,9 +6,10 @@ namespace Vcm.App;
 /// <summary>
 /// Self-update against the project's GitHub releases.
 ///
-/// The release repository is private, so the shipped binary carries a read-only token baked in at
-/// build time (see the GenerateUpdaterSecrets target). Without it the updater still runs, but
-/// GitHub answers 404 for every query and no update is ever found.
+/// The release repository is public, so no credentials are needed or embedded. That is a
+/// deliberate simplification over the private-repo approach, which would require baking a
+/// read-only token into the shipped binary — where anyone holding the binary could extract it,
+/// and where a silent 404 on every check is the failure mode when it is missing.
 ///
 /// Portable deployments update themselves exactly like installed ones: Velopack's notion of
 /// "installed" is "running from a Velopack layout", which the portable zip also is.
@@ -28,17 +29,14 @@ public sealed class Updater
     public bool HasPendingUpdate => _pending is not null;
 
     /// <summary>
-    /// Returns null when updates are not possible: a dev run, a plain folder publish, or a build
-    /// without the token. Callers should treat that as "no updater" and carry on silently.
+    /// Returns null when updates are not possible — a dev run, or a plain folder publish rather
+    /// than a Velopack deployment. Callers should treat that as "no updater" and carry on.
     /// </summary>
     public static Updater? TryCreate()
     {
         try
         {
-            var source = new GithubSource(
-                repoUrl: RepoUrl,
-                accessToken: string.IsNullOrEmpty(UpdaterSecrets.Token) ? null : UpdaterSecrets.Token,
-                prerelease: false);
+            var source = new GithubSource(repoUrl: RepoUrl, accessToken: null, prerelease: false);
 
             var manager = new UpdateManager(source);
             return manager.IsInstalled ? new Updater(manager) : null;
