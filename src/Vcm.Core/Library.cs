@@ -397,10 +397,11 @@ public sealed class Library
          ORDER BY t.name COLLATE NOCASE
         """, r => new Tag(r.GetInt64(0), r.GetString(1), r.GetInt32(2)));
 
-    public IReadOnlyList<string> GetTagsForVideo(long videoId) => _db.Query("""
-        SELECT t.name FROM tags t JOIN video_tags vt ON vt.tag_id = t.id
+    /// <summary>The tags on one video, with ids so a tag can be taken off again.</summary>
+    public IReadOnlyList<Tag> GetTagsForVideo(long videoId) => _db.Query("""
+        SELECT t.id, t.name FROM tags t JOIN video_tags vt ON vt.tag_id = t.id
          WHERE vt.video_id = $v ORDER BY t.name COLLATE NOCASE
-        """, r => r.GetString(0), ("$v", videoId));
+        """, r => new Tag(r.GetInt64(0), r.GetString(1), 0), ("$v", videoId));
 
     /// <summary>Attaches a tag, creating it if this is the first use. Returns the tag id.</summary>
     public long AddTag(long videoId, string name)

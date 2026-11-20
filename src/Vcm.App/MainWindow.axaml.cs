@@ -24,6 +24,8 @@ public partial class MainWindow : Window
     private readonly ObservableCollection<VideoRow> _rateItems = new();
     private readonly ObservableCollection<VideoRow> _viewItems = new();
     private readonly ObservableCollection<TagRow> _tagChips = new();
+    private readonly ObservableCollection<TagRow> _nowTags = new();
+    private readonly ObservableCollection<TagRow> _availableTags = new();
     private readonly ObservableCollection<DuplicateRow> _dupes = new();
 
     /// <summary>
@@ -93,6 +95,8 @@ public partial class MainWindow : Window
         C<ListBox>("ViewList").ItemsSource = _viewItems;
         C<ListBox>("TagChips").ItemsSource = _tagChips;
         C<ItemsControl>("DupeList").ItemsSource = _dupes;
+        C<ItemsControl>("NowTags").ItemsSource = _nowTags;
+        C<ItemsControl>("AvailableTags").ItemsSource = _availableTags;
 
         C<Button>("UpdateButton").Click += (_, _) => ApplyUpdate();
         C<Button>("AddPathButton").Click += OnAddPath;
@@ -191,6 +195,7 @@ public partial class MainWindow : Window
         input.Text = "";
 
         SetStatus(existed ? $"tagged '{name}'" : $"created tag '{name}'");
+        LoadNowTags();
         RefreshTagsAndGrids();
     }
 
@@ -328,6 +333,44 @@ public partial class MainWindow : Window
     /// (DestroyNativeControlCore calls Detach), so this has to run every time the page is shown,
     /// not once at startup.
     /// </summary>
+    /// <summary>
+    /// Shows the playing video's own tags, and beneath them every other tag in the library as
+    /// something to click. Typing is then the exception rather than the rule.
+    /// </summary>
+    private void LoadNowTags()
+    {
+        _nowTags.Clear();
+        _availableTags.Clear();
+
+        if (_engine?.Current is not { } video)
+        {
+            C<StackPanel>("AddTagSection").IsVisible = false;
+            return;
+        }
+
+        var applied = _library.GetTagsForVideo(video.VideoId);
+        foreach (var t in applied) _nowTags.Add(new TagRow(t));
+
+        var appliedIds = applied.Select(t => t.Id).ToHashSet();
+        foreach (var t in _library.GetTags().Where(t => !appliedIds.Contains(t.Id)))
+            _availableTags.Add(new TagRow(t));
+
+        C<StackPanel>("AddTagSection").IsVisible = _availableTags.Count > 0;
+    }
+
+    /// <summary>Applies an existing tag to the playing video with one click.</summary>
+    private void OnAddTagChipClick(object? sender, RoutedEventArgs e)
+    {
+        if ((sender as Button)?.DataContext is not TagRow tag) return;
+        if (_engine?.Current is null) { SetStatus("nothing playing to tag"); return; }
+
+        _engine.TagCurrent(tag.Name);
+        SetStatus($"tagged '{tag.Name}'");
+
+        LoadNowTags();
+        RefreshTagsAndGrids();
+    }
+
     private void AttachVideoSurface()
     {
         if (_engine is null) return;
@@ -801,6 +844,7 @@ public partial class MainWindow : Window
             C<TextBlock>("BarSubtitle").Text = "";
             seek.Heat = null;
             seek.Position = 0;
+            _nowTags.Clear();
             return;
         }
 
@@ -814,6 +858,7 @@ public partial class MainWindow : Window
         seek.Position = 0;
 
         UpdateVoteButtons();
+        LoadNowTags();
         InvalidateGrids();
     }
 

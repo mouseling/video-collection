@@ -142,6 +142,32 @@
       <Setter Property="Background" Value="#74A0FF"/>
     </Style>
 
+    <!-- Tags shown on the playing video, each removable. -->
+    <Style Selector="Border.tagchip">
+      <Setter Property="Background" Value="#1B1F28"/>
+      <Setter Property="BorderBrush" Value="{StaticResource Line}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="13"/>
+      <Setter Property="Padding" Value="12,5"/>
+      <Setter Property="Margin" Value="0,0,8,8"/>
+    </Style>
+    <!-- Clickable chips for applying an existing tag. -->
+    <Style Selector="Button.addchip">
+      <Setter Property="Background" Value="#13161C"/>
+      <Setter Property="Foreground" Value="{StaticResource Dim}"/>
+      <Setter Property="BorderBrush" Value="{StaticResource Line}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="13"/>
+      <Setter Property="Padding" Value="12,5"/>
+      <Setter Property="FontSize" Value="12.5"/>
+      <Setter Property="Margin" Value="0,0,8,8"/>
+    </Style>
+    <Style Selector="Button.addchip:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="#1E2A47"/>
+      <Setter Property="BorderBrush" Value="{StaticResource Accent}"/>
+      <Setter Property="TextElement.Foreground" Value="#E6E9EF"/>
+    </Style>
+
     <!-- Tag chips. A single-selection ListBox, so picking a tag releases the previous one. -->
     <Style Selector="ListBox.chips">
       <Setter Property="Background" Value="Transparent"/>

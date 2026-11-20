@@ -68,6 +68,42 @@
             <TextBlock Name="NowSubtitle" Text="Pick a video from Locations or Tags"
                        Foreground="{StaticResource Faint}" FontSize="12" Margin="0,4,0,0"
                        TextTrimming="CharacterEllipsis"/>
+
+            <!-- The tags on this video, so what is applied is visible rather than only
+                 discoverable by typing into the suggestion box. -->
+            <ItemsControl Name="NowTags" Margin="0,10,0,0">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="vm:TagRow">
+                  <!-- Display only, deliberately: a delete control here is too easy to hit by
+                       accident while reaching for the video. -->
+                  <Border Classes="tagchip">
+                    <TextBlock Text="{Binding Name}" Foreground="{StaticResource Text}"
+                               FontSize="12.5"/>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <!-- Every tag already in use, click to apply. Saves typing a tag that exists, and
+                 keeps near-duplicates from creeping in. Tags already on this video are left out,
+                 since re-applying one would do nothing. -->
+            <StackPanel Name="AddTagSection" IsVisible="False" Margin="0,2,0,0">
+              <TextBlock Text="CLICK TO ADD" Classes="colhead" Margin="0,0,0,6"/>
+              <ItemsControl Name="AvailableTags">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate DataType="vm:TagRow">
+                    <Button Classes="addchip" Content="{Binding Name}" Click="OnAddTagChipClick"
+                            ToolTip.Tip="Add this tag to the playing video"/>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
           </StackPanel>
         </Border>
         <Border Grid.Row="1" Name="VideoFrame" Focusable="True" Margin="24,0,24,18" CornerRadius="10" Background="#07080A"
