@@ -590,14 +590,12 @@ public partial class MainWindow : Window
     {
         _currentPage = page;
 
+        // Only the active page is visible. The Now playing page MUST be hidden when it is not
+        // active: its VideoView is a native child window, and the OS composites those above
+        // everything the framework draws — leaving it mounted puts a black rectangle over every
+        // other page regardless of visual-tree order.
         for (var i = 0; i < _pageGrids.Length; i++)
-        {
-            // Now playing is never hidden, only covered. Its VideoView owns a native child
-            // window only while visible, and the moment that handle goes away libvlc falls back
-            // to opening a window of its own — so hiding this page would eject the video into a
-            // separate frameless window mid-playback. The other pages are opaque and sit on top.
-            _pageGrids[i].IsVisible = Pages[i].Page == page || Pages[i].Page == Page.NowPlaying;
-        }
+            _pageGrids[i].IsVisible = Pages[i].Page == page;
 
         RefreshVisiblePage();
     }
