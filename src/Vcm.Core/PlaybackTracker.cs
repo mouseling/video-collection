@@ -28,6 +28,10 @@ public sealed class PlaybackTracker
     private long _regionStartMs = -1;
     private long _regionEndMs = -1;
 
+    /// <summary>WatchedMs when the current region opened, so a region is judged on time actually
+    /// watched rather than on how far the media position travelled.</summary>
+    private long _regionWatchedAtStart;
+
     public long SessionId { get; }
     public long VideoId { get; }
     public long WatchedMs { get; private set; }
@@ -42,9 +46,9 @@ public sealed class PlaybackTracker
         _now = clock ?? (() => DateTime.UtcNow);
         VideoId = videoId;
 
-        _db.Exec("INSERT INTO sessions (video_id, started_utc) VALUES ($v, $t)",
-                 ("$v", videoId), ("$t", Database.Utc(_now())));
-        SessionId = Convert.ToInt64(_db.Scalar("SELECT last_insert_rowid()")!);
+        SessionId = _db.InsertReturningId(
+            "INSERT INTO sessions (video_id, started_utc) VALUES ($v, $t)",
+            ("$v", videoId), ("$t", Database.Utc(_now())));
 
         _lastTick = _now();
         _lastPositionMs = startPositionMs;
@@ -80,6 +84,7 @@ public sealed class PlaybackTracker
                 FlushRegion();
                 _regionStartMs = positionMs;
                 _regionEndMs = positionMs;
+                _regionWatchedAtStart = WatchedMs;
             }
             else
             {
@@ -94,6 +99,7 @@ public sealed class PlaybackTracker
             {
                 FlushRegion();
                 _regionStartMs = positionMs;
+                _regionWatchedAtStart = WatchedMs;
             }
             _regionEndMs = positionMs;
         }
@@ -116,15 +122,24 @@ public sealed class PlaybackTracker
         return true;
     }
 
-    /// <summary>Writes the region if it is long enough to say something about interest.</summary>
+    /// <summary>
+    /// Writes the region if it was watched long enough to say something about interest.
+    ///
+    /// The test is on WATCHED time, not on the span the media position covered. Those two can
+    /// disagree — position reporting is coarse in some containers and is allowed to drift up to
+    /// SeekToleranceMs per tick — and gating on the span would let a nine-second abandoned start
+    /// whose position happened to reach 10 s paint heat on the seek bar, which is exactly what
+    /// the threshold exists to prevent.
+    /// </summary>
     private void FlushRegion()
     {
         if (_regionStartMs < 0) return;
 
         var start = Math.Min(_regionStartMs, _regionEndMs);
         var end = Math.Max(_regionStartMs, _regionEndMs);
+        var watchedHere = WatchedMs - _regionWatchedAtStart;
 
-        if (end - start >= ThresholdMs)
+        if (end > start && watchedHere >= ThresholdMs)
         {
             _db.Exec("""
                 INSERT INTO regions (video_id, session_id, start_ms, end_ms)
@@ -135,6 +150,7 @@ public sealed class PlaybackTracker
 
         _regionStartMs = -1;
         _regionEndMs = -1;
+        _regionWatchedAtStart = WatchedMs;
     }
 
     /// <summary>Closes the session. A session under the threshold leaves no view behind.</summary>

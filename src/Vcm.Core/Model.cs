@@ -3,48 +3,7 @@ namespace Vcm.Core;
 /// <summary>A registered root folder. Scanned recursively.</summary>
 public sealed record Root(long Id, string Path, DateTime AddedUtc, DateTime? LastScanUtc);
 
-/// <summary>
-/// A video, identified by content rather than by path. One row per distinct piece of content;
-/// the same content living at several paths produces several <see cref="VideoFile"/> rows,
-/// which is exactly what makes duplicates visible and lets statistics survive a move or rename.
-/// </summary>
-public sealed record Video(
-    long Id,
-    string ContentHash,
-    long DurationMs,
-    int Width,
-    int Height,
-    string? VideoCodec,
-    string? AudioCodec,
-    DateTime FirstSeenUtc);
-
-/// <summary>One path on disk pointing at a <see cref="Video"/>.</summary>
-public sealed record VideoFile(
-    long Id,
-    long VideoId,
-    long? RootId,
-    string Path,
-    long SizeBytes,
-    DateTime MTimeUtc,
-    bool Present);
-
 public sealed record Tag(long Id, string Name, int VideoCount);
-
-/// <summary>
-/// A single playback of a video. Watch time excludes paused time. A session only counts toward
-/// view statistics once it passes the 10-second threshold, and carries at most one vote.
-/// </summary>
-public sealed record Session(
-    long Id,
-    long VideoId,
-    DateTime StartedUtc,
-    DateTime? EndedUtc,
-    long WatchedMs,
-    bool Counted,
-    int Vote);
-
-/// <summary>A stretch of a video that was actually watched. Only stored if long enough.</summary>
-public sealed record Region(long Id, long VideoId, long SessionId, long StartMs, long EndMs);
 
 /// <summary>A video plus its rolled-up statistics — what every grid in the UI binds to.</summary>
 public sealed record VideoStats(
@@ -79,7 +38,13 @@ public sealed class FolderNode
 
 public sealed record ScanProgress(string CurrentPath, int FilesSeen, int FilesHashed);
 
-public sealed record ScanResult(int Added, int Updated, int Removed, int Unchanged, TimeSpan Elapsed);
+/// <summary>
+/// Outcome of a scan. <paramref name="Skipped"/> counts files and directories that could not be
+/// read; they are NOT treated as deleted, but the user should be told the picture is incomplete
+/// rather than shown a silent "0 added".
+/// </summary>
+public sealed record ScanResult(int Added, int Updated, int Removed, int Unchanged,
+                                int Skipped, string? FirstSkipped, TimeSpan Elapsed);
 
 public enum RatingSort { NetScore, Ratio, MostLiked, MostDisliked }
 

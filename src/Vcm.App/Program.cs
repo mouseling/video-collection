@@ -1,4 +1,5 @@
 using Avalonia;
+using Vcm.Core;
 using Velopack;
 
 namespace Vcm.App;
@@ -11,11 +12,21 @@ internal static class Program
     [STAThread]
     public static void Main(string[] args)
     {
+        // Before anything else that can fail: this is a Windows GUI executable, so without a log
+        // file a crash leaves no evidence whatsoever on the user's machine.
+        Log.UseDirectory(System.IO.Path.GetDirectoryName(AppPaths.LibraryDbPath)!);
+        Log.CatchUnhandled();
+
         // Must run before anything else. On first launch after an update Velopack uses this to
         // finish installing and then re-launches, so no UI may be created ahead of it. Outside a
         // Velopack deployment it is a no-op, which is the normal case during development.
         try { VelopackApp.Build().Run(); }
-        catch { /* not deployed by Velopack */ }
+        catch (Exception ex)
+        {
+            // Normal for a dev run. But Run() is also what FINISHES an update, so a failure here
+            // on a real deployment must leave a trace rather than looking like a cold start.
+            Log.Write("VelopackApp.Run failed (expected outside a Velopack deployment)", ex);
+        }
 
         var i = Array.IndexOf(args, "--shot");
         if (i >= 0)

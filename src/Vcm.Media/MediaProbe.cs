@@ -78,39 +78,64 @@ public sealed class MediaProbe
         return n == 0 ? codec.ToString() : new string(clean[..n]).Trim();
     }
 
-    /// <summary>Probes everything in the library that has not been read yet.</summary>
-    public async Task<int> ProbePendingAsync(Library library, IProgress<string>? progress = null,
-                                             CancellationToken ct = default)
-    {
-        var pending = library.GetUnprobed();
-        var done = 0;
+    public sealed record ProbeRun(int Probed, int Unreadable, int Failed);
 
-        foreach (var (id, path) in pending)
+    /// <summary>
+    /// Reads metadata for everything in the library that has not been read yet, looping until no
+    /// batch remains so a large first scan does not leave most videos without a duration.
+    ///
+    /// A file libvlc parses but cannot describe is marked as read, so it is not retried forever.
+    /// A file that throws — a transient IO error, a path that went away mid-scan — is deliberately
+    /// left unprobed: marking it read would permanently pin it at "duration 0" with no way back,
+    /// and there is no re-probe command to recover with.
+    /// </summary>
+    public async Task<ProbeRun> ProbePendingAsync(Library library, IProgress<string>? progress = null,
+                                                  CancellationToken ct = default)
+    {
+        int probed = 0, unreadable = 0, failed = 0;
+
+        while (true)
         {
             ct.ThrowIfCancellationRequested();
-            progress?.Report(Path.GetFileName(path));
 
-            try
+            var batch = library.GetUnprobed();
+            if (batch.Count == 0) break;
+
+            var progressedThisBatch = false;
+
+            foreach (var (id, path) in batch)
             {
-                var result = await ProbeAsync(path, ct);
-                if (result is null)
+                ct.ThrowIfCancellationRequested();
+                progress?.Report(Path.GetFileName(path));
+
+                try
                 {
-                    // Mark it read anyway, otherwise an unreadable file is retried on every scan.
-                    library.SaveProbe(id, 0, 0, 0, null, null);
-                    continue;
+                    var result = await ProbeAsync(path, ct);
+                    if (result is null)
+                    {
+                        library.SaveProbe(id, 0, 0, 0, null, null);
+                        unreadable++;
+                    }
+                    else
+                    {
+                        library.SaveProbe(id, result.DurationMs, result.Width, result.Height,
+                                          result.VideoCodec, result.AudioCodec);
+                        probed++;
+                    }
+                    progressedThisBatch = true;
                 }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception ex)
+                {
+                    Log.Write($"probe failed, leaving unprobed: {path}", ex);
+                    failed++;
+                }
+            }
 
-                library.SaveProbe(id, result.DurationMs, result.Width, result.Height,
-                                  result.VideoCodec, result.AudioCodec);
-                done++;
-            }
-            catch (OperationCanceledException) { throw; }
-            catch (Exception)
-            {
-                library.SaveProbe(id, 0, 0, 0, null, null);
-            }
+            // Every row in the batch threw, so GetUnprobed will return the same rows forever.
+            if (!progressedThisBatch) break;
         }
 
-        return done;
+        return new ProbeRun(probed, unreadable, failed);
     }
 }

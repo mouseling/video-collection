@@ -9,7 +9,32 @@ public sealed class Library
 
     public Library(Database db) => _db = db;
 
-    public Database Db => _db;
+    // ------------------------------------------------------------------ playback
+
+    /// <summary>
+    /// Opens a viewing session for a video. Exists so the playback layer never needs a handle on
+    /// the connection itself — every statement stays behind the gate that keeps the scan thread
+    /// and the UI thread from colliding, and all SQL stays in this project.
+    /// </summary>
+    public PlaybackTracker StartSession(long videoId, long startPositionMs = 0,
+                                        Func<DateTime>? clock = null) =>
+        new(_db, videoId, startPositionMs, clock);
+
+    public IReadOnlyList<(long StartMs, long EndMs)> GetRegions(long videoId) => _db.Query(
+        "SELECT start_ms, end_ms FROM regions WHERE video_id = $v ORDER BY start_ms",
+        r => (r.GetInt64(0), r.GetInt64(1)), ("$v", videoId));
+
+    public double[] GetHeat(long videoId, long durationMs, int buckets) =>
+        Heatmap.Compute(GetRegions(videoId), durationMs, buckets);
+
+    /// <summary>Like and dislike totals for one video, without the full-library aggregate cost.</summary>
+    public (int Likes, int Dislikes) GetVoteCounts(long videoId) => _db.Query("""
+        SELECT SUM(CASE WHEN vote =  1 THEN 1 ELSE 0 END),
+               SUM(CASE WHEN vote = -1 THEN 1 ELSE 0 END)
+          FROM sessions WHERE video_id = $v AND vote <> 0
+        """,
+        r => (r.IsDBNull(0) ? 0 : r.GetInt32(0), r.IsDBNull(1) ? 0 : r.GetInt32(1)),
+        ("$v", videoId)).FirstOrDefault();
 
     // ------------------------------------------------------------------ roots
 
@@ -26,7 +51,7 @@ public sealed class Library
     {
         error = null;
         string full;
-        try { full = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar); }
+        try { full = Normalise(path); }
         catch (Exception ex) { error = $"Not a usable path: {ex.Message}"; return null; }
 
         if (!Directory.Exists(full)) { error = "That folder does not exist."; return null; }
@@ -51,8 +76,8 @@ public sealed class Library
         }
 
         var now = Database.Utc(DateTime.UtcNow);
-        _db.Exec("INSERT INTO roots (path, added_utc) VALUES ($p, $t)", ("$p", full), ("$t", now));
-        var id = Convert.ToInt64(_db.Scalar("SELECT last_insert_rowid()")!);
+        var id = _db.InsertReturningId(
+            "INSERT INTO roots (path, added_utc) VALUES ($p, $t)", ("$p", full), ("$t", now));
         return new Root(id, full, Database.ParseUtc(now), null);
     }
 
@@ -62,6 +87,23 @@ public sealed class Library
         // the folder is registered again later.
         _db.Exec("DELETE FROM files WHERE root_id = $id", ("$id", id));
         _db.Exec("DELETE FROM roots WHERE id = $id", ("$id", id));
+    }
+
+    /// <summary>
+    /// Canonicalises a root path. The trailing separator is stripped so comparisons and the
+    /// LIKE prefix in <see cref="GetVideosInFolder"/> behave, EXCEPT for a drive root: trimming
+    /// "D:\" to "D:" changes its meaning on Windows from the root of drive D to the current
+    /// directory on drive D, which would scan the wrong place entirely.
+    /// </summary>
+    private static string Normalise(string path)
+    {
+        var full = Path.GetFullPath(path);
+
+        if (Path.GetPathRoot(full) is { Length: > 0 } root &&
+            string.Equals(full, root, PathComparison))
+            return full;
+
+        return full.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
     }
 
     private static StringComparison PathComparison =>
@@ -201,8 +243,13 @@ public sealed class Library
     /// </summary>
     public IReadOnlyList<VideoStats> GetVideosInFolder(string folder, bool recursive = false)
     {
-        var dir = folder.TrimEnd(Path.DirectorySeparatorChar);
-        var prefix = EscapeLike(dir + Path.DirectorySeparatorChar) + "%";
+        // A drive root already ends in a separator; trimming and re-appending would be wrong
+        // for it and right for everything else, so keep whatever Normalise settled on.
+        var dir = Normalise(folder);
+        var withSeparator = dir.EndsWith(Path.DirectorySeparatorChar)
+            ? dir
+            : dir + Path.DirectorySeparatorChar;
+        var prefix = EscapeLike(withSeparator) + "%";
 
         var rows = _db.Query($"""
             SELECT {StatCols}
@@ -317,16 +364,28 @@ public sealed class Library
 
     // ------------------------------------------------------------------ misc
 
+    /// <summary>
+    /// Totals for the sidebar. Videos are counted only where a file is still on disk: a video
+    /// whose files have all gone keeps its history but appears in no grid, so counting it here
+    /// would report "47 videos" above an empty library.
+    /// </summary>
     public (int Videos, int Files, long Bytes) GetLibrarySize()
     {
-        var videos = Convert.ToInt32(_db.Scalar("SELECT COUNT(*) FROM videos") ?? 0);
+        var videos = Convert.ToInt32(_db.Scalar(
+            "SELECT COUNT(DISTINCT video_id) FROM files WHERE present = 1") ?? 0);
         var files = Convert.ToInt32(_db.Scalar("SELECT COUNT(*) FROM files WHERE present = 1") ?? 0);
         var bytes = Convert.ToInt64(_db.Scalar("SELECT COALESCE(SUM(size_bytes),0) FROM files WHERE present = 1") ?? 0L);
         return (videos, files, bytes);
     }
 
-    /// <summary>Videos that still need their duration and codecs read from the file.</summary>
-    public IReadOnlyList<(long Id, string Path)> GetUnprobed(int limit = 500) => _db.Query("""
+    /// <summary>
+    /// Videos that still need their duration and codecs read from the file. Returned in batches
+    /// so a first scan of a large collection reports progress and stays cancellable; callers are
+    /// expected to loop until this comes back empty.
+    /// </summary>
+    public const int ProbeBatchSize = 500;
+
+    public IReadOnlyList<(long Id, string Path)> GetUnprobed(int limit = ProbeBatchSize) => _db.Query("""
         SELECT v.id, f.path
           FROM videos v
           JOIN files f ON f.video_id = v.id

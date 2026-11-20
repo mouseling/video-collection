@@ -94,25 +94,3 @@ public sealed class DuplicateRow
 
     public string Header => $"{Video.DisplayName}   ·   {Fmt.Time(Video.DurationMs)}   ·   {Paths.Count} copies";
 }
-
-public static class Fmt
-{
-    /// <summary>h:mm:ss above an hour, m:ss below. Used everywhere a duration is shown.</summary>
-    public static string Time(long ms)
-    {
-        if (ms <= 0) return "—";
-        var t = TimeSpan.FromMilliseconds(ms);
-        return t.TotalHours >= 1
-            ? $"{(int)t.TotalHours}:{t.Minutes:00}:{t.Seconds:00}"
-            : $"{t.Minutes}:{t.Seconds:00}";
-    }
-
-    public static string Size(long bytes)
-    {
-        string[] units = ["B", "KB", "MB", "GB", "TB"];
-        double v = bytes;
-        var i = 0;
-        while (v >= 1024 && i < units.Length - 1) { v /= 1024; i++; }
-        return $"{v:0.#} {units[i]}";
-    }
-}

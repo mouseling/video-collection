@@ -28,7 +28,7 @@ Full behaviour is specified in [REQUIREMENTS.md](REQUIREMENTS.md).
 | `src/Vcm.Media` | libvlc: runtime loading, metadata probing, the player engine. No UI framework. |
 | `src/Vcm.App` | Avalonia desktop application. |
 | `src/Vcm.Cli` | Headless driver used to exercise and verify the core. |
-| `prototype/` | The original look-and-feel mockup, kept for reference. |
+| `tests/Vcm.Core.Tests` | xUnit tests for the rules: scanning, hashing, statistics. |
 
 ## Build and run
 
@@ -96,9 +96,24 @@ runtime, since installing VLC system-wide requires root:
 ./scripts/fetch-testdata.sh      # ~280 MB of open-licensed sample videos
 ```
 
-## Verifying the core
+## Tests
 
-`Vcm.Cli` drives the library without the UI, which is how the statistics rules were checked:
+```bash
+dotnet test
+```
+
+45 tests covering the rules that matter: scanner reconciliation (rename, move between roots,
+delete, edit in place, a vanished root, a cancelled scan), content hashing including the
+deliberate large-file collision trade-off, the 10-second threshold at its exact boundary,
+paused time, one-vote-per-session, cross-session accumulation, heatmap bucketing and overlap,
+and that a video with several copies on disk does not double-count.
+
+They run in under a second against temp-file SQLite databases and a virtual clock, and need no
+media, no display and no VLC.
+
+## Verifying by hand
+
+`Vcm.Cli` drives the library end to end, including real decoding, which the unit tests cannot:
 
 ```bash
 export VCM_DB=/tmp/vcm-test.db

@@ -24,15 +24,45 @@ public partial class MainWindow : Window
     private readonly ObservableCollection<TagRow> _tagChips = new();
     private readonly ObservableCollection<DuplicateRow> _dupes = new();
 
-    private Grid[] _pages = [];
+    /// <summary>
+    /// The pages, in nav order. Having the enum drive the grid lookup, the nav list and the
+    /// screenshot names keeps those three in step; they used to be three separate literal lists
+    /// that a reordering would silently desynchronise.
+    /// </summary>
+    internal enum Page { NowPlaying, Locations, Tags, Rating, MostViewed, Duplicates }
+
+    private static readonly (Page Page, string Grid, string Shot)[] Pages =
+    [
+        (Page.NowPlaying, "PageNowPlaying", "now-playing"),
+        (Page.Locations,  "PageLocations",  "locations"),
+        (Page.Tags,       "PageTags",       "tags"),
+        (Page.Rating,     "PageRating",     "rating"),
+        (Page.MostViewed, "PageViewed",     "most-viewed"),
+        (Page.Duplicates, "PageDupes",      "duplicates"),
+    ];
+
+    private Grid[] _pageGrids = [];
+    private Page _currentPage = Page.Locations;
+    private readonly HashSet<Page> _dirty = new();
     private FolderRow? _selectedFolder;
     private CancellationTokenSource? _scanCts;
     private Updater? _updater;
     private const int HeatBuckets = 240;
 
-    public MainWindow()
+    /// <summary>
+    /// Required by the XAML compiler; never reached at runtime.
+    /// </summary>
+    public MainWindow() => throw new InvalidOperationException(
+        "MainWindow requires a Database; construct it from App.");
+
+    /// <summary>
+    /// The database is opened by the caller, not here. Constructing it inside the window meant a
+    /// locked or corrupt library threw before any window existed, so the application simply never
+    /// appeared; App now reports that failure in a window of its own.
+    /// </summary>
+    public MainWindow(Database db)
     {
-        _db = new Database(AppPaths.LibraryDbPath);
+        _db = db;
         _library = new Library(_db);
 
         AvaloniaXamlLoader.Load(this);
@@ -46,15 +76,11 @@ public partial class MainWindow : Window
 
     private void Wire()
     {
-        _pages =
-        [
-            C<Grid>("PageNowPlaying"), C<Grid>("PageLocations"), C<Grid>("PageTags"),
-            C<Grid>("PageRating"), C<Grid>("PageViewed"), C<Grid>("PageDupes"),
-        ];
+        _pageGrids = Pages.Select(p => C<Grid>(p.Grid)).ToArray();
 
         var nav = C<ListBox>("Nav");
-        nav.SelectionChanged += (_, _) => ShowPage(nav.SelectedIndex);
-        ShowPage(1);
+        nav.SelectionChanged += (_, _) => ShowPage((Page)nav.SelectedIndex);
+        ShowPage(Page.Locations);
 
         C<TreeView>("Tree").ItemsSource = _tree;
         C<ListBox>("LocList").ItemsSource = _locItems;
@@ -116,7 +142,7 @@ public partial class MainWindow : Window
             RefreshTagsAndGrids();
         };
 
-        Closing += (_, _) => Teardown();
+        Closing += (_, _) => ShutDown();
     }
 
     private T C<T>(string name) where T : Control => this.FindControl<T>(name)!;
@@ -140,7 +166,7 @@ public partial class MainWindow : Window
         _engine.QueueExhausted += () => Dispatcher.UIThread.Post(() =>
         {
             SetStatus("queue finished");
-            RefreshGrids();
+            InvalidateGrids();
         });
     }
 
@@ -149,23 +175,42 @@ public partial class MainWindow : Window
     private void RefreshAll()
     {
         LoadTree();
-        RefreshTagsAndGrids();
-        UpdateSummary();
+        RefreshTagsAndGrids();   // already refreshes the summary
     }
 
     private void RefreshTagsAndGrids()
     {
         LoadTagChips();
-        RefreshGrids();
+        InvalidateGrids();
     }
 
-    private void RefreshGrids()
+    /// <summary>
+    /// Marks the ranked grids stale instead of rebuilding them.
+    ///
+    /// Each of those queries aggregates over the whole library, and they were being run on the UI
+    /// thread on every track change and every vote. At a few hundred videos that is invisible; at
+    /// the collection sizes this is built for it stutters playback at exactly the moment the user
+    /// is watching. Nothing off-screen needs to be correct until it is looked at.
+    /// </summary>
+    private void InvalidateGrids()
     {
-        LoadRating(CurrentRatingSort());
-        LoadViewed(CurrentViewedSort());
-        LoadDupes();
-        LoadFolder();
+        _dirty.UnionWith([Page.Rating, Page.MostViewed, Page.Duplicates, Page.Locations]);
+        RefreshVisiblePage();
         UpdateSummary();
+    }
+
+    private void RefreshVisiblePage()
+    {
+        if (!_dirty.Remove(_currentPage)) return;
+
+        switch (_currentPage)
+        {
+            case Page.Locations: LoadFolder(); break;
+            case Page.Tags: LoadTag(); break;
+            case Page.Rating: LoadRating(CurrentRatingSort()); break;
+            case Page.MostViewed: LoadViewed(CurrentViewedSort()); break;
+            case Page.Duplicates: LoadDupes(); break;
+        }
     }
 
     private void UpdateSummary()
@@ -284,7 +329,7 @@ public partial class MainWindow : Window
         _selectedFolder = null;
         SetStatus("root removed — ratings and history kept");
         LoadTree();
-        RefreshGrids();
+        InvalidateGrids();
     }
 
     /// <summary>Scans on a background thread, then reads metadata for anything new.</summary>
@@ -307,8 +352,15 @@ public partial class MainWindow : Window
                 var result = new Scanner(_db).Scan(progress, ct);
                 Dispatcher.UIThread.Post(() =>
                 {
-                    SetStatus($"{result.Added} added, {result.Updated} updated, " +
-                              $"{result.Removed} gone ({result.Elapsed.TotalSeconds:0.0}s)");
+                    var summary = $"{result.Added} added, {result.Updated} updated, " +
+                                  $"{result.Removed} gone ({result.Elapsed.TotalSeconds:0.0}s)";
+                    if (result.Skipped > 0)
+                        summary += $" · {result.Skipped} unreadable, kept";
+                    SetStatus(summary);
+
+                    if (result.Skipped > 0)
+                        Log.Write($"scan skipped {result.Skipped} unreadable paths, " +
+                                  $"first: {result.FirstSkipped}");
                     RefreshAll();
                 });
 
@@ -317,14 +369,19 @@ public partial class MainWindow : Window
                 if (vlc is not null)
                 {
                     var probe = new MediaProbe(vlc);
-                    var done = await probe.ProbePendingAsync(_library,
+                    var run = await probe.ProbePendingAsync(_library,
                         new Progress<string>(name => Dispatcher.UIThread.Post(
                             () => SetStatus($"reading {name}"), DispatcherPriority.Background)),
                         ct);
 
                     Dispatcher.UIThread.Post(() =>
                     {
-                        if (done > 0) SetStatus($"read metadata for {done} videos");
+                        if (run.Probed > 0 || run.Failed > 0)
+                        {
+                            var msg = $"read metadata for {run.Probed} videos";
+                            if (run.Failed > 0) msg += $", {run.Failed} failed";
+                            SetStatus(msg);
+                        }
                         RefreshAll();
                     });
                 }
@@ -335,6 +392,7 @@ public partial class MainWindow : Window
             }
             catch (Exception ex)
             {
+                Log.Write("scan failed", ex);
                 Dispatcher.UIThread.Post(() => SetStatus($"scan failed: {ex.Message}"));
             }
             finally
@@ -376,7 +434,7 @@ public partial class MainWindow : Window
         if (first is null) return;
 
         _engine.Play(first, queue);
-        C<ListBox>("Nav").SelectedIndex = 0;
+        C<ListBox>("Nav").SelectedIndex = (int)Page.NowPlaying;
     }
 
     private void Vote(int vote)
@@ -390,7 +448,7 @@ public partial class MainWindow : Window
         }
 
         SetStatus(vote > 0 ? "liked" : "disliked");
-        RefreshGrids();
+        InvalidateGrids();
         UpdateVoteButtons();
     }
 
@@ -437,8 +495,8 @@ public partial class MainWindow : Window
 
         Task.Run(async () =>
         {
-            // Teardown persists the open viewing session; ApplyAsync then replaces the process.
-            var ok = await _updater.ApplyAsync(() => Dispatcher.UIThread.Invoke(Teardown));
+            // ShutDown persists the open viewing session; ApplyAsync then replaces the process.
+            var ok = await _updater.ApplyAsync(() => Dispatcher.UIThread.Invoke(ShutDown));
             if (ok) return;
 
             Dispatcher.UIThread.Post(() =>
@@ -477,7 +535,7 @@ public partial class MainWindow : Window
         seek.Position = 0;
 
         UpdateVoteButtons();
-        RefreshGrids();
+        InvalidateGrids();
     }
 
     private void UpdatePlayerBar()
@@ -512,14 +570,18 @@ public partial class MainWindow : Window
         C<Button>("DislikeButton").IsEnabled = video is not null && !voted;
 
         if (video is null) return;
-        var fresh = _library.GetVideo(video.VideoId);
-        C<TextBlock>("LikeCount").Text = (fresh?.Likes ?? 0).ToString();
-        C<TextBlock>("DislikeCount").Text = (fresh?.Dislikes ?? 0).ToString();
+
+        // Two integers, so a narrow query rather than GetVideo's whole-library aggregation.
+        var (likes, dislikes) = _library.GetVoteCounts(video.VideoId);
+        C<TextBlock>("LikeCount").Text = likes.ToString();
+        C<TextBlock>("DislikeCount").Text = dislikes.ToString();
     }
 
-    private void ShowPage(int index)
+    private void ShowPage(Page page)
     {
-        for (var i = 0; i < _pages.Length; i++) _pages[i].IsVisible = i == index;
+        _currentPage = page;
+        for (var i = 0; i < _pageGrids.Length; i++) _pageGrids[i].IsVisible = Pages[i].Page == page;
+        RefreshVisiblePage();
     }
 
     private void SetStatus(string text) => C<TextBlock>("StatusText").Text = text;
@@ -528,7 +590,6 @@ public partial class MainWindow : Window
     public async Task CaptureAllAsync(string dir)
     {
         Directory.CreateDirectory(dir);
-        string[] names = ["now-playing", "locations", "tags", "rating", "most-viewed", "duplicates"];
         var nav = C<ListBox>("Nav");
 
         // Give Locations something selected so the grid is not empty in the shot.
@@ -539,17 +600,17 @@ public partial class MainWindow : Window
             LoadFolder();
         }
 
-        for (var i = 0; i < names.Length; i++)
+        for (var i = 0; i < Pages.Length; i++)
         {
             nav.SelectedIndex = i;
-            ShowPage(i);
+            ShowPage(Pages[i].Page);
             await Task.Delay(400);
             Dispatcher.UIThread.RunJobs();
 
             var size = new Avalonia.PixelSize((int)Bounds.Width, (int)Bounds.Height);
             using var rtb = new Avalonia.Media.Imaging.RenderTargetBitmap(size, new Avalonia.Vector(96, 96));
             rtb.Render(this);
-            var path = System.IO.Path.Combine(dir, $"{i + 1:00}-{names[i]}.png");
+            var path = System.IO.Path.Combine(dir, $"{i + 1:00}-{Pages[i].Shot}.png");
             rtb.Save(path);
             Console.WriteLine($"wrote {path}");
         }
@@ -563,15 +624,19 @@ public partial class MainWindow : Window
         return null;
     }
 
-    private bool _torndown;
+    private int _shutdown;
 
-    private void Teardown()
+    /// <summary>
+    /// Persists the open viewing session and closes the library. Safe to call more than once and
+    /// from either the window closing or the application lifetime, so no exit path loses the
+    /// session. Order matters: the engine must finish writing before the database closes.
+    /// </summary>
+    public void ShutDown()
     {
-        if (_torndown) return;
-        _torndown = true;
+        if (Interlocked.Exchange(ref _shutdown, 1) != 0) return;
 
-        _scanCts?.Cancel();
+        try { _scanCts?.Cancel(); } catch (ObjectDisposedException) { /* scan already finished */ }
         _engine?.ShutdownForExit();   // finalises the open session so its watch time is kept
-        _db.Dispose();
+        _db.Dispose();                // takes the gate, so an in-flight scan statement completes
     }
 }

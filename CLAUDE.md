@@ -73,6 +73,23 @@ plugins. That guard exists because single-file publishing silently hides them in
 the app then starts but decodes nothing — a failure mode that looks fine until someone presses
 play.
 
+## Concurrency
+
+Four threads touch this app: the Avalonia UI thread, a background scan, a 250 ms player tick on a
+threadpool thread, and libvlc's own event threads. Two rules keep that honest.
+
+**All SQL goes through `Database`'s helpers.** The connection, the gate and `Cmd` are private so
+nothing can run a statement outside the lock. Never expose them again — `PlayerEngine` used to hold
+the raw connection via `Library.Db`, which made the lock a convention rather than a guarantee.
+
+**Insert-then-read-the-id must be one statement.** Use `Database.InsertReturningId`, never
+`INSERT` followed by a separate `SELECT last_insert_rowid()`: the gate is released between the two,
+the rowid belongs to the *connection*, and a concurrent insert on another thread hands back its id.
+That corrupted session↔video linkage whenever a scan overlapped playback.
+
+**`PlayerEngine` serialises its own state** on one lock. Every queue advance has the libvlc event
+thread closing a session while the tick thread is still updating the same tracker.
+
 ## Data model
 
 Identity is the **content hash** (size + first and last 1 MiB), never the path — one `videos` row
@@ -86,10 +103,21 @@ the wall clock while playing, so paused time never counts. The 10-second thresho
 
 ## Verifying changes to the rules
 
-`Vcm.Cli simulate` drives `PlaybackTracker` against a virtual clock, so the thresholds can be
-checked instantly. The user's own example is the regression test: sessions of 600, 900 and 480
-seconds must report exactly `33:00 total / 3 views`, and a 5-second session must not appear at all.
-`playtest` does the same through real decoding.
+`dotnet test` first — `tests/Vcm.Core.Tests` covers the statistics rules, scanner reconciliation
+and hashing, and runs in under a second. CI (`.github/workflows/ci.yml`) runs it on every push.
+
+Two tests exist specifically because the bugs they catch were real and silent, so do not weaken
+them: `A_root_that_has_vanished_does_not_empty_the_library` (the delete sweep must stay scoped to
+roots that were actually walked) and `A_short_session_leaves_no_region_even_if_the_position_travelled_far`
+(regions are judged on watched time, never on how far the media position moved). Both were
+confirmed to fail against the old code before the fixes landed.
+
+`The_hash_is_stable_for_identical_content` pins the content-hash algorithm. If it fails, stop:
+changing that hash orphans every stored video and silently erases the user's entire history on
+the next scan.
+
+`Vcm.Cli playtest` remains the manual gate for anything involving real decoding, which the unit
+tests deliberately do not attempt.
 
 ## UI
 

@@ -112,7 +112,7 @@ internal static class Program
         if (args.Length < 2) { Console.Error.WriteLine("need a folder"); return 1; }
         var recursive = args.Contains("-r");
         foreach (var v in lib.GetVideosInFolder(Path.GetFullPath(args[1]), recursive))
-            Console.WriteLine($"  {v.VideoId,3}  {Dur(v.DurationMs),8}  {v.DisplayName}" +
+            Console.WriteLine($"  {v.VideoId,3}  {Fmt.Time(v.DurationMs),8}  {v.DisplayName}" +
                               (v.IsDuplicated ? $"   [{v.FileCount} copies]" : ""));
         return 0;
     }
@@ -176,7 +176,7 @@ internal static class Program
         var mode = args.Length > 1 && args[1] == "views" ? ViewedSort.ViewCount : ViewedSort.TotalTime;
         Console.WriteLine($"  sorted by {mode}");
         foreach (var v in lib.GetMostViewed(mode))
-            Console.WriteLine($"  {v.VideoId,3}  {Dur(v.TotalWatchedMs),9} total  " +
+            Console.WriteLine($"  {v.VideoId,3}  {Fmt.Time(v.TotalWatchedMs),9} total  " +
                               $"{v.Views,3} views   {v.DisplayName}");
         return 0;
     }
@@ -227,7 +227,7 @@ internal static class Program
         var heat = Heatmap.ForVideo(db, videoId, duration, buckets);
 
         const string ramp = " .:-=+*#%@";
-        Console.WriteLine($"  {video.DisplayName}  ({Dur(duration)})");
+        Console.WriteLine($"  {video.DisplayName}  ({Fmt.Time(duration)})");
         Console.Write("  ");
         foreach (var h in heat) Console.Write(ramp[Math.Clamp((int)(h * (ramp.Length - 1)), 0, ramp.Length - 1)]);
         Console.WriteLine();
@@ -235,7 +235,7 @@ internal static class Program
         var regions = db.Query("SELECT start_ms, end_ms FROM regions WHERE video_id = $v ORDER BY start_ms",
                                r => (r.GetInt64(0), r.GetInt64(1)), ("$v", videoId));
         Console.WriteLine($"  {regions.Count} regions:");
-        foreach (var (a, b) in regions) Console.WriteLine($"      {Dur(a)} → {Dur(b)}");
+        foreach (var (a, b) in regions) Console.WriteLine($"      {Fmt.Time(a)} → {Fmt.Time(b)}");
         return 0;
     }
 
@@ -270,12 +270,12 @@ internal static class Program
         }
 
         await Task.Delay(seconds * 1000);
-        Console.WriteLine($"  position reached {Dur(engine.PositionMs)} / {Dur(engine.DurationMs)}");
+        Console.WriteLine($"  position reached {Fmt.Time(engine.PositionMs)} / {Fmt.Time(engine.DurationMs)}");
         engine.Stop();
         await Task.Delay(300);
 
         var after = lib.GetVideo(videoId)!;
-        Console.WriteLine($"  recorded: {after.Views} views, {Dur(after.TotalWatchedMs)} total watched");
+        Console.WriteLine($"  recorded: {after.Views} views, {Fmt.Time(after.TotalWatchedMs)} total watched");
         return 0;
     }
 
@@ -297,7 +297,7 @@ internal static class Program
             var r = await probe.ProbeAsync(path);
             Console.WriteLine(r is null
                 ? $"  FAILED   {Path.GetFileName(path)}"
-                : $"  {Dur(r.DurationMs),9}  {r.Width}x{r.Height,-5} {r.VideoCodec}/{r.AudioCodec}  {Path.GetFileName(path)}");
+                : $"  {Fmt.Time(r.DurationMs),9}  {r.Width}x{r.Height,-5} {r.VideoCodec}/{r.AudioCodec}  {Path.GetFileName(path)}");
         }
         return 0;
     }
@@ -313,26 +313,20 @@ internal static class Program
         }
 
         var probe = new Vcm.Media.MediaProbe(vlc);
-        var pending = lib.GetUnprobed().Count;
-        var done = await probe.ProbePendingAsync(lib);
-        Console.WriteLine($"  probed {done} of {pending}");
+        var run = await probe.ProbePendingAsync(lib);
+        Console.WriteLine($"  probed {run.Probed}" +
+                          (run.Unreadable > 0 ? $", {run.Unreadable} unreadable" : "") +
+                          (run.Failed > 0 ? $", {run.Failed} failed (left for a later scan)" : ""));
 
         foreach (var v in lib.GetAllVideos())
-            Console.WriteLine($"  {v.VideoId,3}  {Dur(v.DurationMs),9}  {v.DisplayName}");
+            Console.WriteLine($"  {v.VideoId,3}  {Fmt.Time(v.DurationMs),9}  {v.DisplayName}");
         return 0;
     }
 
     private static int ShowStats(Library lib)
     {
         var (videos, files, bytes) = lib.GetLibrarySize();
-        Console.WriteLine($"  {videos} videos, {files} files, {bytes / 1024.0 / 1024:0.0} MB");
+        Console.WriteLine($"  {videos} videos, {files} files, {Fmt.Size(bytes)}");
         return 0;
-    }
-
-    private static string Dur(long ms)
-    {
-        var t = TimeSpan.FromMilliseconds(ms);
-        return t.TotalHours >= 1 ? $"{(int)t.TotalHours}:{t.Minutes:00}:{t.Seconds:00}"
-                                 : $"{t.Minutes}:{t.Seconds:00}";
     }
 }

@@ -72,31 +72,6 @@ public sealed class HeatSeekBar : Control
         base.OnPointerPressed(e);
     }
 
-    // Cold → hot ramp. Deliberately amber, so heat never reads as the blue selection accent.
-    private static Color HeatColor(double t)
-    {
-        t = Math.Clamp(t, 0, 1);
-        var stops = new (double T, Color C)[]
-        {
-            (0.00, Color.FromRgb(0x33, 0x3A, 0x4B)),
-            (0.35, Color.FromRgb(0x6B, 0x5E, 0x44)),
-            (0.70, Color.FromRgb(0xC8, 0x8E, 0x33)),
-            (1.00, Color.FromRgb(0xFF, 0xC4, 0x6B)),
-        };
-        for (var i = 0; i < stops.Length - 1; i++)
-        {
-            var (t0, c0) = stops[i];
-            var (t1, c1) = stops[i + 1];
-            if (t > t1) continue;
-            var k = (t - t0) / (t1 - t0);
-            return Color.FromRgb(
-                (byte)(c0.R + (c1.R - c0.R) * k),
-                (byte)(c0.G + (c1.G - c0.G) * k),
-                (byte)(c0.B + (c1.B - c0.B) * k));
-        }
-        return stops[^1].C;
-    }
-
     public override void Render(DrawingContext ctx)
     {
         var w = Bounds.Width;
@@ -125,7 +100,7 @@ public sealed class HeatSeekBar : Control
 
                 var colH = Math.Max(1.5, v * waveH);
                 var played = t <= Position;
-                var c = HeatColor(v);
+                var c = HeatRamp.At(v);
                 // Unplayed heat is dimmed so the played portion still reads at a glance.
                 var brush = new SolidColorBrush(c, played ? 1.0 : 0.38);
                 ctx.FillRectangle(brush, new Rect(px, waveTop + waveH - colH, 1.02, colH));
@@ -174,32 +149,47 @@ public sealed class HeatLegend : Control
         var cols = (int)Math.Max(1, Math.Floor(w));
         for (var px = 0; px < cols; px++)
         {
-            var c = HeatColorPublic(px / (double)cols);
+            var c = HeatRamp.At(px / (double)cols);
             ctx.FillRectangle(new SolidColorBrush(c), new Rect(px, 0, 1.02, Bounds.Height));
         }
     }
+}
 
-    private static Color HeatColorPublic(double t)
+/// <summary>
+/// The cold→hot ramp for replay heat, in one place.
+///
+/// HeatSeekBar paints the wave and HeatLegend paints the key that explains it, and the two are on
+/// screen together — a legend derived from a second copy of these stops would quietly start
+/// lying about the bar beside it. Amber is deliberate: heat must never be mistaken for the blue
+/// selection accent.
+/// </summary>
+internal static class HeatRamp
+{
+    private static readonly (double T, Color C)[] Stops =
+    [
+        (0.00, Color.FromRgb(0x33, 0x3A, 0x4B)),
+        (0.35, Color.FromRgb(0x6B, 0x5E, 0x44)),
+        (0.70, Color.FromRgb(0xC8, 0x8E, 0x33)),
+        (1.00, Color.FromRgb(0xFF, 0xC4, 0x6B)),
+    ];
+
+    public static Color At(double t)
     {
-        var stops = new (double T, Color C)[]
-        {
-            (0.00, Color.FromRgb(0x33, 0x3A, 0x4B)),
-            (0.35, Color.FromRgb(0x6B, 0x5E, 0x44)),
-            (0.70, Color.FromRgb(0xC8, 0x8E, 0x33)),
-            (1.00, Color.FromRgb(0xFF, 0xC4, 0x6B)),
-        };
         t = Math.Clamp(t, 0, 1);
-        for (var i = 0; i < stops.Length - 1; i++)
+
+        for (var i = 0; i < Stops.Length - 1; i++)
         {
-            var (t0, c0) = stops[i];
-            var (t1, c1) = stops[i + 1];
+            var (t0, c0) = Stops[i];
+            var (t1, c1) = Stops[i + 1];
             if (t > t1) continue;
+
             var k = (t - t0) / (t1 - t0);
             return Color.FromRgb(
                 (byte)(c0.R + (c1.R - c0.R) * k),
                 (byte)(c0.G + (c1.G - c0.G) * k),
                 (byte)(c0.B + (c1.B - c0.B) * k));
         }
-        return stops[^1].C;
+
+        return Stops[^1].C;
     }
 }

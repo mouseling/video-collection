@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Vcm.App/Vcm.App.csproj" />
+    <Project Path="src/Vcm.Cli/Vcm.Cli.csproj" />
+    <Project Path="src/Vcm.Core/Vcm.Core.csproj" />
+    <Project Path="src/Vcm.Media/Vcm.Media.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Vcm.Core.Tests/Vcm.Core.Tests.csproj" />
+  </Folder>
+</Solution>
