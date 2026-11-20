@@ -397,8 +397,13 @@ public partial class MainWindow : Window
             }
             finally
             {
-                _scanCts?.Dispose();
-                _scanCts = null;
+                // Cleared on the UI thread, which is the only thread that reads it — both the
+                // "already running" guard and ShutDown. Disposing it from here raced them.
+                Dispatcher.UIThread.Post(() =>
+                {
+                    _scanCts?.Dispose();
+                    _scanCts = null;
+                });
             }
         }, ct);
     }
@@ -635,7 +640,7 @@ public partial class MainWindow : Window
     {
         if (Interlocked.Exchange(ref _shutdown, 1) != 0) return;
 
-        try { _scanCts?.Cancel(); } catch (ObjectDisposedException) { /* scan already finished */ }
+        _scanCts?.Cancel();
         _engine?.ShutdownForExit();   // finalises the open session so its watch time is kept
         _db.Dispose();                // takes the gate, so an in-flight scan statement completes
     }

@@ -63,9 +63,12 @@ public sealed class FolderRow
         get
         {
             if (!Node.IsRoot || Node.Name.Length <= 30) return Node.Name;
-            var parts = Node.Name.Split(System.IO.Path.DirectorySeparatorChar,
-                                        StringSplitOptions.RemoveEmptyEntries);
-            return parts.Length <= 2 ? Node.Name : "…/" + string.Join('/', parts[^2..]);
+            var sep = System.IO.Path.DirectorySeparatorChar;
+            var parts = Node.Name.Split(sep, StringSplitOptions.RemoveEmptyEntries);
+
+            // Rejoined with the platform separator: splitting on '\' and rejoining with '/'
+            // would show a Windows root as a mix of both.
+            return parts.Length <= 2 ? Node.Name : "…" + sep + string.Join(sep, parts[^2..]);
         }
     }
 
