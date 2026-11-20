@@ -75,15 +75,15 @@ updates *and* travel with the folder if you move it.
 
 ### Cutting a release
 
-Releases are built by `.github/workflows/release.yml` on a Windows runner — Velopack cannot
-produce Windows packages from Linux. Push a tag:
+**Pushing to `main` releases.** Any push that touches `src/` builds and publishes a new version,
+and running copies offer the update on their next launch. Versions come from commit height via
+nbgv, so there is nothing to tag or bump by hand. Documentation-only pushes are skipped.
 
-```bash
-git tag v0.1.1 && git push origin v0.1.1
-```
+Releases are built by `.github/workflows/release.yml` on a Windows runner, because Velopack
+cannot produce Windows packages from Linux. No secrets or tokens are needed: the repository is
+public, so the shipped app reads its own releases anonymously.
 
-No secrets or tokens are needed. The repository is public, so the shipped app reads its own
-releases anonymously and nothing has to be embedded in the binary.
+To publish a specific version instead, push a `vX.Y.Z` tag and it is used verbatim.
 
 ### Developing on Linux
 

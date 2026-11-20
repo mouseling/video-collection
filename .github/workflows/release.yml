@@ -3,14 +3,16 @@ name: Release
 # Velopack packages for Windows can only be produced on Windows — the Linux vpk build ships
 # nothing but the AppImage packer — so this runs on a Windows runner.
 #
-# Deliberately NOT triggered by every push to main: each release carries a ~207 MB payload
-# (libvlc and its 320 plugins), so cutting one per commit would burn storage fast. Tag a release
-# when you want one, or start it by hand. To match the radar's behaviour instead, swap the `tags`
-# trigger below for `branches: [main]` with `paths: ['src/**']`.
+# Every push to main that touches the application ships a release, so a running copy offers the
+# update on its next launch with nothing further to do. Version numbers come from nbgv (git
+# height), so no tagging is needed; pushing an explicit vX.Y.Z tag also works and wins over the
+# computed version. Documentation-only pushes are skipped — there is nothing in them to install.
 on:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - main
+    paths:
+      - 'src/**'
   workflow_dispatch:
 
 permissions:
@@ -37,10 +39,11 @@ jobs:
         id: nbgv
 
       - name: Resolve release version
-        # A tag push must produce exactly the version it names. nbgv derives its version from
-        # version.json plus commit height, which does NOT match the tag — left to itself it
-        # publishes under a different tag than the one that triggered the run, stranding the
-        # original. So the pushed tag wins, and nbgv is only the fallback for manual runs.
+        # Normally nbgv supplies the version, derived from version.json plus commit height, and
+        # vpk creates the matching tag — so pushing to main is all that is needed. If someone
+        # does push an explicit vX.Y.Z tag, that wins: nbgv's computed version would not match
+        # it, and the release would otherwise be published under a different tag than the one
+        # that triggered the run, stranding the original.
         id: ver
         shell: pwsh
         run: |

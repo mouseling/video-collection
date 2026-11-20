@@ -52,6 +52,9 @@ Velopack, same shape as the radar. Three rules:
 1. **Windows packages can only be built on Windows.** The Linux `vpk` build exposes nothing but
    the AppImage packer, so `.github/workflows/release.yml` runs on `windows-latest`. Don't try to
    pack a release locally.
+0. **Every push to `main` touching `src/` ships a release**, versioned by nbgv from commit height
+   — the same model as the radar. Treat merging to `main` as shipping to users. An explicit
+   `vX.Y.Z` tag overrides the computed version when one is pushed.
 2. **Portable is still self-updating.** Velopack's `IsInstalled` means "running from a Velopack
    layout", not "installed by Setup.exe" — the portable zip qualifies. `IsPortable` is the separate
    flag. We ship only the portable zip; there is deliberately no installer.
