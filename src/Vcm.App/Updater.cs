@@ -1,3 +1,4 @@
+using Vcm.Core;
 using Velopack;
 using Velopack.Sources;
 
@@ -29,6 +30,13 @@ public sealed class Updater
     public bool HasPendingUpdate => _pending is not null;
 
     /// <summary>
+    /// Why the last check or download failed, for the status line. Kept because an update that
+    /// never arrives is otherwise indistinguishable from there being no update — the exact
+    /// confusion that a silent permanent 404 would cause.
+    /// </summary>
+    public string? LastError { get; private set; }
+
+    /// <summary>
     /// Returns null when updates are not possible — a dev run, or a plain folder publish rather
     /// than a Velopack deployment. Callers should treat that as "no updater" and carry on.
     /// </summary>
@@ -41,34 +49,39 @@ public sealed class Updater
             var manager = new UpdateManager(source);
             return manager.IsInstalled ? new Updater(manager) : null;
         }
-        catch
+        catch (Exception ex)
         {
             // Not deployed by Velopack. Normal during development.
+            Log.Write("updater unavailable (expected outside a Velopack deployment)", ex);
             return null;
         }
     }
 
     /// <summary>
-    /// Looks for a newer release. Failures are swallowed and reported as "no update" — being
-    /// offline is ordinary and must never interrupt playback with an error.
+    /// Looks for a newer release. Failures are reported as "no update" rather than raised — being
+    /// offline is ordinary and must never interrupt playback — but the reason is kept in
+    /// <see cref="LastError"/> and logged.
     /// </summary>
     public async Task<string?> CheckAsync()
     {
         try
         {
             _pending = await _manager.CheckForUpdatesAsync();
+            LastError = null;
             return PendingVersion;
         }
-        catch
+        catch (Exception ex)
         {
             _pending = null;
+            LastError = ex.Message;
+            Log.Write("update check failed (usually no internet)", ex);
             return null;
         }
     }
 
     /// <summary>
-    /// Downloads the pending update and restarts into it. Returns false if the download fails;
-    /// on success the process is replaced and nothing after this runs.
+    /// Downloads the pending update and restarts into it. Returns false only if the download
+    /// failed, in which case the application is untouched and can carry on.
     /// </summary>
     public async Task<bool> ApplyAsync(Action? beforeRestart = null)
     {
@@ -78,15 +91,30 @@ public sealed class Updater
         {
             await _manager.DownloadUpdatesAsync(_pending);
         }
-        catch
+        catch (Exception ex)
         {
+            LastError = ex.Message;
+            Log.Write("update download failed", ex);
             return false;
         }
 
-        // Last chance to close the database and persist the open viewing session; the call below
-        // terminates the process immediately.
+        // Past this point there is no way back: beforeRestart closes the database and ends the
+        // open viewing session.
         beforeRestart?.Invoke();
-        _manager.ApplyUpdatesAndRestart(_pending);
+
+        try
+        {
+            _manager.ApplyUpdatesAndRestart(_pending);
+        }
+        catch (Exception ex)
+        {
+            Log.Write("applying the update failed after shutdown", ex);
+        }
+
+        // ApplyUpdatesAndRestart replaces the process and should never return. If it does, the
+        // database is already closed and the player already stopped, so returning to the UI would
+        // leave a window that looks alive and throws on every click. Exiting is the honest end.
+        Environment.Exit(0);
         return true;
     }
 }

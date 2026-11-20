@@ -142,13 +142,4 @@ public static class VlcRuntime
         }
         return null;
     }
-
-    public static void Shutdown()
-    {
-        lock (Gate)
-        {
-            _instance?.Dispose();
-            _instance = null;
-        }
-    }
 }

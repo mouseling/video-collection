@@ -44,25 +44,4 @@ public static class MediaReaper
             catch { /* shutting down, or libvlc already tore it down */ }
         }
     }
-
-    /// <summary>Releases everything still parked. Call before tearing down libvlc.</summary>
-    public static void DrainAll()
-    {
-        List<VlcMedia> all;
-        lock (Gate)
-        {
-            all = Pending.Select(p => p.Media).ToList();
-            Pending.Clear();
-            _timer?.Dispose();
-            _timer = null;
-        }
-
-        // Give the preparser the same grace it would have had normally.
-        Thread.Sleep(Grace);
-        foreach (var media in all)
-        {
-            try { media.Dispose(); }
-            catch { /* ignored */ }
-        }
-    }
 }

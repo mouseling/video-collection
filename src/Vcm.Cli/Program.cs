@@ -31,7 +31,7 @@ internal static class Program
                 case "by-tag": return ShowByTag(lib, args);
                 case "rating": return ShowRating(lib, args);
                 case "viewed": return ShowViewed(lib, args);
-                case "simulate": return Simulate(db, lib, args);
+                case "simulate": return Simulate(db, args);
                 case "heat": return ShowHeat(db, lib, args);
                 case "stats": return ShowStats(lib);
                 case "probe": return Probe(lib).GetAwaiter().GetResult();
@@ -65,6 +65,10 @@ internal static class Program
                                    fake a viewing session
           heat <videoId> [buckets] replay heat as a bar chart
           stats                    library totals
+          probe                    read duration/codecs for anything not yet read
+          probe-one <path>...      probe specific files, for isolating playback problems
+          playtest <videoId> <sec> [seekSec]
+                                   play for real through libvlc, then report what was recorded
         """);
 
     // ------------------------------------------------------------------ commands
@@ -185,7 +189,7 @@ internal static class Program
     /// Fakes a viewing session against a virtual clock so the 10-second rule, paused-time
     /// exclusion and region capture can be checked without waiting in real time.
     /// </summary>
-    private static int Simulate(Database db, Library lib, string[] args)
+    private static int Simulate(Database db, string[] args)
     {
         if (args.Length < 3) { Console.Error.WriteLine("need <videoId> <watchSec> [startSec] [vote]"); return 1; }
 

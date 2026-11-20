@@ -503,7 +503,7 @@ public partial class MainWindow : Window
             {
                 button.IsEnabled = true;
                 button.Content = $"Update to {_updater.PendingVersion}";
-                SetStatus("update download failed — will retry next launch");
+                SetStatus($"update failed: {_updater.LastError ?? "unknown error"}");
             });
         });
     }
