@@ -81,7 +81,7 @@
       </Grid>
 
       <!-- LOCATIONS -->
-      <Grid Name="PageLocations" ColumnDefinitions="312,*">
+      <Grid Name="PageLocations" Background="{StaticResource Deep}" ColumnDefinitions="312,*">
         <Border Grid.Column="0" Background="#12151B"
                 BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
           <Grid RowDefinitions="Auto,*">
@@ -153,7 +153,7 @@
       </Grid>
 
       <!-- TAGS -->
-      <Grid Name="PageTags" IsVisible="False" RowDefinitions="Auto,Auto,Auto,*">
+      <Grid Name="PageTags" Background="{StaticResource Deep}" IsVisible="False" RowDefinitions="Auto,Auto,Auto,*">
         <StackPanel Grid.Row="0" Margin="24,20,24,14">
           <TextBlock Text="Tags" Foreground="{StaticResource Text}" FontSize="17" FontWeight="SemiBold"/>
           <TextBlock Text="Pick a tag to see everything carrying it" Foreground="{StaticResource Faint}"
@@ -200,7 +200,7 @@
       </Grid>
 
       <!-- RATING -->
-      <Grid Name="PageRating" IsVisible="False" RowDefinitions="Auto,Auto,*">
+      <Grid Name="PageRating" Background="{StaticResource Deep}" IsVisible="False" RowDefinitions="Auto,Auto,*">
         <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="24,20,24,14">
           <StackPanel Grid.Column="0">
             <TextBlock Text="Rating" Foreground="{StaticResource Text}" FontSize="17" FontWeight="SemiBold"/>
@@ -252,7 +252,7 @@
       </Grid>
 
       <!-- MOST VIEWED -->
-      <Grid Name="PageViewed" IsVisible="False" RowDefinitions="Auto,Auto,*">
+      <Grid Name="PageViewed" Background="{StaticResource Deep}" IsVisible="False" RowDefinitions="Auto,Auto,*">
         <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="24,20,24,14">
           <StackPanel Grid.Column="0">
             <TextBlock Text="Most viewed" Foreground="{StaticResource Text}" FontSize="17" FontWeight="SemiBold"/>
@@ -299,7 +299,7 @@
       </Grid>
 
       <!-- DUPLICATES -->
-      <Grid Name="PageDupes" IsVisible="False" RowDefinitions="Auto,*">
+      <Grid Name="PageDupes" Background="{StaticResource Deep}" IsVisible="False" RowDefinitions="Auto,*">
         <StackPanel Grid.Row="0" Margin="24,20,24,14">
           <TextBlock Text="Duplicates" Foreground="{StaticResource Text}" FontSize="17" FontWeight="SemiBold"/>
           <TextBlock Text="Same content hash, different paths. Review and delete manually."

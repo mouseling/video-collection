@@ -438,8 +438,12 @@ public partial class MainWindow : Window
         var first = queue.Current;
         if (first is null) return;
 
-        _engine.Play(first, queue);
+        // Show the video surface BEFORE starting playback. libvlc is handed the window handle
+        // when the VideoView is realised; starting first meant there was nothing to hand it.
         C<ListBox>("Nav").SelectedIndex = (int)Page.NowPlaying;
+
+        // One dispatcher turn so the layout pass creates the native window first.
+        Dispatcher.UIThread.Post(() => _engine.Play(first, queue), DispatcherPriority.Background);
     }
 
     private void Vote(int vote)
@@ -585,7 +589,16 @@ public partial class MainWindow : Window
     private void ShowPage(Page page)
     {
         _currentPage = page;
-        for (var i = 0; i < _pageGrids.Length; i++) _pageGrids[i].IsVisible = Pages[i].Page == page;
+
+        for (var i = 0; i < _pageGrids.Length; i++)
+        {
+            // Now playing is never hidden, only covered. Its VideoView owns a native child
+            // window only while visible, and the moment that handle goes away libvlc falls back
+            // to opening a window of its own — so hiding this page would eject the video into a
+            // separate frameless window mid-playback. The other pages are opaque and sit on top.
+            _pageGrids[i].IsVisible = Pages[i].Page == page || Pages[i].Page == Page.NowPlaying;
+        }
+
         RefreshVisiblePage();
     }
 
