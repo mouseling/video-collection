@@ -226,3 +226,101 @@ public class LibraryTests
         Assert.Equal(1, Convert.ToInt64(restored.Scalar("SELECT COUNT(*) FROM files")));
     }
 }
+
+public class SearchAndRenameTests
+{
+    private static TempLibrary Seeded()
+    {
+        var lib = new TempLibrary();
+        lib.AddRoot();
+        lib.MakeVideo("talks/Vulkan render graph.mp4", seed: 1);
+        lib.MakeVideo("talks/SIMD tricks.mkv", seed: 2);
+        lib.MakeVideo("archive/holiday.mp4", seed: 3);
+        lib.Scan();
+        return lib;
+    }
+
+    [Fact]
+    public void Search_matches_part_of_a_file_name()
+    {
+        using var lib = Seeded();
+        var hit = Assert.Single(lib.Library.Search("SIMD"));
+        Assert.Equal("SIMD tricks.mkv", hit.DisplayName);
+    }
+
+    [Fact]
+    public void Search_is_case_insensitive_and_matches_folders_too()
+    {
+        using var lib = Seeded();
+        Assert.Equal(2, lib.Library.Search("TALKS").Count);
+        Assert.Single(lib.Library.Search("holiday"));
+    }
+
+    [Fact]
+    public void Search_for_nothing_returns_nothing()
+    {
+        using var lib = Seeded();
+        Assert.Empty(lib.Library.Search("   "));
+        Assert.Empty(lib.Library.Search("no such video"));
+    }
+
+    [Fact]
+    public void Renaming_moves_the_file_and_keeps_its_history()
+    {
+        using var lib = Seeded();
+        var video = lib.Library.Search("holiday").Single();
+
+        var tracker = lib.Library.StartSession(video.VideoId);
+        tracker.CastVote(1);
+        tracker.Finish();
+        lib.Library.AddTag(video.VideoId, "summer");
+
+        Assert.True(lib.Library.RenameFile(video.Path, "Holiday 2026.mp4", out var error), error);
+
+        Assert.False(File.Exists(video.Path));
+        Assert.True(File.Exists(Path.Combine(Path.GetDirectoryName(video.Path)!, "Holiday 2026.mp4")));
+
+        var after = lib.Library.Search("Holiday 2026").Single();
+        Assert.Equal(video.VideoId, after.VideoId);     // same content, same history
+        Assert.Equal(1, after.Likes);
+        Assert.Contains("summer", after.Tags);
+
+        // And a rescan must not treat it as a new file or delete anything.
+        var result = lib.Scan();
+        Assert.Equal(0, result.Added);
+        Assert.Equal(0, result.Removed);
+    }
+
+    [Fact]
+    public void Renaming_onto_an_existing_name_is_refused()
+    {
+        using var lib = Seeded();
+        var one = lib.Library.Search("Vulkan").Single();
+
+        Assert.False(lib.Library.RenameFile(one.Path, "SIMD tricks.mkv", out var error));
+        Assert.Contains("already exists", error);
+        Assert.True(File.Exists(one.Path));          // untouched
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void Renaming_to_an_empty_name_is_refused(string name)
+    {
+        using var lib = Seeded();
+        var one = lib.Library.Search("Vulkan").Single();
+        Assert.False(lib.Library.RenameFile(one.Path, name, out var error));
+        Assert.Contains("empty", error);
+    }
+
+    [Fact]
+    public void Renaming_a_file_that_is_gone_is_refused()
+    {
+        using var lib = Seeded();
+        var one = lib.Library.Search("Vulkan").Single();
+        File.Delete(one.Path);
+
+        Assert.False(lib.Library.RenameFile(one.Path, "whatever.mp4", out var error));
+        Assert.Contains("no longer on disk", error);
+    }
+}

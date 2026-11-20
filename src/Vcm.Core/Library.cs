@@ -272,6 +272,67 @@ public sealed class Library
     private static string EscapeLike(string s) =>
         s.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
 
+    /// <summary>
+    /// Searches every registered root. Matches anywhere in the full path, so a folder name finds
+    /// everything beneath it as readily as a file name finds one video.
+    /// </summary>
+    public IReadOnlyList<VideoStats> Search(string term, int limit = 1000)
+    {
+        term = term.Trim();
+        if (term.Length == 0) return [];
+
+        return _db.Query($"""
+            SELECT {StatCols}
+              FROM files f
+              JOIN videos v ON v.id = f.video_id
+              {StatJoins}
+             WHERE f.present = 1 AND f.path LIKE $q ESCAPE '\'
+             ORDER BY f.path COLLATE NOCASE
+             LIMIT $n
+            """, MapStats, ("$q", "%" + EscapeLike(term) + "%"), ("$n", limit));
+    }
+
+    /// <summary>
+    /// Renames a file on disk and follows it in the index.
+    ///
+    /// Statistics need no special handling: identity is the content hash, and the file row keeps
+    /// pointing at the same video, so ratings, watch time and tags come along by construction.
+    /// </summary>
+    public bool RenameFile(string path, string newName, out string? error)
+    {
+        error = null;
+        newName = newName.Trim();
+
+        if (newName.Length == 0) { error = "The name is empty."; return false; }
+        if (newName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+        {
+            error = "That name contains characters a file name cannot have.";
+            return false;
+        }
+
+        var dir = Path.GetDirectoryName(path);
+        if (string.IsNullOrEmpty(dir)) { error = "That path is not usable."; return false; }
+        if (!File.Exists(path)) { error = "That file is no longer on disk."; return false; }
+
+        var target = Path.Combine(dir, newName);
+        if (string.Equals(target, path, PathComparison)) return true;
+        if (File.Exists(target)) { error = "A file with that name already exists here."; return false; }
+
+        try
+        {
+            File.Move(path, target);
+        }
+        catch (Exception ex)
+        {
+            // Most often the file is open in the player, or read-only.
+            error = ex.Message;
+            return false;
+        }
+
+        _db.Exec("UPDATE files SET path = $new WHERE path = $old", ("$new", target), ("$old", path));
+        return true;
+    }
+
     /// <summary>One row per distinct video — used by Tags, Rating and Most viewed.</summary>
     private IReadOnlyList<VideoStats> QueryByVideo(string where, string orderBy,
                                                    params (string, object?)[] args) =>

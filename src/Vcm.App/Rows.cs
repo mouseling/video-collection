@@ -84,15 +84,22 @@ public sealed class FolderRow
     public bool IsExpanded { get; set; }
 }
 
+/// <summary>One copy on disk. A row object rather than a bare string so the reveal button can
+/// find its own path.</summary>
+public sealed class PathRow
+{
+    public required string Path { get; init; }
+}
+
 public sealed class DuplicateRow
 {
     public VideoStats Video { get; }
-    public ObservableCollection<string> Paths { get; } = new();
+    public ObservableCollection<PathRow> Paths { get; } = new();
 
     public DuplicateRow(VideoStats video, IEnumerable<string> paths)
     {
         Video = video;
-        foreach (var p in paths) Paths.Add(p);
+        foreach (var p in paths) Paths.Add(new PathRow { Path = p });
     }
 
     public string Header => $"{Video.DisplayName}   ·   {Fmt.Time(Video.DurationMs)}   ·   {Paths.Count} copies";

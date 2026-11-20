@@ -1,4 +1,6 @@
+using Avalonia;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -47,6 +49,8 @@ public partial class MainWindow : Window
     private FolderRow? _selectedFolder;
     private CancellationTokenSource? _scanCts;
     private Updater? _updater;
+    private bool _fullScreen;
+    private bool _ctrlAlone;
     private const int HeatBuckets = 240;
 
     /// <summary>
@@ -106,6 +110,9 @@ public partial class MainWindow : Window
 
         C<CheckBox>("RecursiveToggle").IsCheckedChanged += (_, _) => LoadFolder();
 
+        C<TextBox>("SearchBox").TextChanged += (_, _) => LoadFolder();
+        C<Button>("RenameButton").Click += (_, _) => RenameSelected();
+
         var chips = C<ListBox>("TagChips");
         chips.SelectionChanged += (_, _) => LoadTag();
 
@@ -129,23 +136,160 @@ public partial class MainWindow : Window
 
         C<HeatSeekBar>("Seek").Seeked += f => _engine?.SeekFraction(f);
 
-        var tagInput = C<TextBox>("TagInput");
+        C<Button>("FullScreenButton").Click += (_, _) => ToggleFullScreen();
+
+        // Double-click to toggle full screen. VideoView re-raises the pointer events its
+        // transparent overlay receives, but not the synthesised DoubleTapped gesture, so the
+        // click count is read from the pointer event itself.
+        C<VideoView>("Video").PointerPressed += (_, e) =>
+        {
+            // The overlay that forwards this event lives in its own top-level window, so after a
+            // click the keyboard goes there and Ctrl/Space stop reaching this window. Taking
+            // focus back is what makes the shortcuts work reliably rather than intermittently.
+            Activate();
+            FocusKeyboardAnchor();
+
+            if (e.ClickCount != 2) return;
+            ToggleFullScreen();
+            e.Handled = true;
+        };
+        C<Border>("VideoFrame").DoubleTapped += (_, e) => { ToggleFullScreen(); e.Handled = true; };
+
+        // Tunnelling, so the shortcuts are seen before the focused control consumes them.
+        AddHandler(KeyDownEvent, OnGlobalKeyDown, RoutingStrategies.Tunnel);
+        AddHandler(KeyUpEvent, OnGlobalKeyUp, RoutingStrategies.Tunnel);
+
+        var tagInput = C<AutoCompleteBox>("TagInput");
         tagInput.KeyDown += (_, e) =>
         {
             if (e.Key != Key.Enter) return;
-            var name = tagInput.Text?.Trim();
-            if (string.IsNullOrEmpty(name) || _engine?.Current is null) return;
-
-            _engine.TagCurrent(name);
-            tagInput.Text = "";
-            SetStatus($"tagged '{name}'");
-            RefreshTagsAndGrids();
+            ApplyTagFromInput(tagInput);
+            e.Handled = true;
         };
 
         Closing += (_, _) => ShutDown();
     }
 
     private T C<T>(string name) where T : Control => this.FindControl<T>(name)!;
+
+    /// <summary>
+    /// Applies whatever is in the tag box to the playing video — either an existing tag chosen
+    /// from the suggestions, or a new one typed in full.
+    /// </summary>
+    private void ApplyTagFromInput(AutoCompleteBox input)
+    {
+        var name = (input.SelectedItem as string ?? input.Text)?.Trim();
+        if (string.IsNullOrEmpty(name)) return;
+
+        if (_engine?.Current is null) { SetStatus("nothing playing to tag"); return; }
+
+        var existed = _library.GetTags().Any(t =>
+            string.Equals(t.Name, name, StringComparison.OrdinalIgnoreCase));
+
+        _engine.TagCurrent(name);
+        input.SelectedItem = null;
+        input.Text = "";
+
+        SetStatus(existed ? $"tagged '{name}'" : $"created tag '{name}'");
+        RefreshTagsAndGrids();
+    }
+
+    /// <summary>
+    /// Space toggles playback, Escape leaves full screen. Ctrl is handled on release — see
+    /// <see cref="OnGlobalKeyUp"/>.
+    ///
+    /// Typing must still work: the tag box is a TextBox, and swallowing Space there would make it
+    /// impossible to type a tag containing one.
+    /// </summary>
+    private void OnGlobalKeyDown(object? sender, KeyEventArgs e)
+    {
+        // Tapping Ctrl on its own toggles full screen, so pressing it is only interesting while
+        // nothing else follows. Any other key means this is a combination like Ctrl+C.
+        _ctrlAlone = e.Key is Key.LeftCtrl or Key.RightCtrl;
+
+        if (TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() is TextBox) return;
+
+        switch (e.Key)
+        {
+            case Key.Space:
+                _engine?.TogglePause();
+                e.Handled = true;
+                break;
+
+            case Key.F2 when _currentPage == Page.Locations:
+                RenameSelected();
+                e.Handled = true;
+                break;
+
+            case Key.Escape when _fullScreen:
+                ToggleFullScreen();
+                e.Handled = true;
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Puts keyboard focus on the video frame.
+    ///
+    /// Focus previously went to the play button, which full screen hides — a hidden element
+    /// cannot hold focus, so the shortcuts stopped arriving the moment full screen was entered.
+    /// The frame is visible in both modes and is focusable but not interactive, so it parks
+    /// focus somewhere harmless while the tunnelling handler on the window sees every key.
+    /// </summary>
+    private void FocusKeyboardAnchor() => C<Border>("VideoFrame").Focus();
+
+    /// <summary>
+    /// Toggles full screen when Ctrl is tapped by itself. Acting on release, and only when no
+    /// other key intervened, keeps Ctrl+C and every other combination working normally.
+    /// </summary>
+    private void OnGlobalKeyUp(object? sender, KeyEventArgs e)
+    {
+        if (e.Key is not (Key.LeftCtrl or Key.RightCtrl)) return;
+
+        var tapped = _ctrlAlone;
+        _ctrlAlone = false;
+
+        if (!tapped) return;
+        if (TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() is TextBox) return;
+
+        ToggleFullScreen();
+        e.Handled = true;
+    }
+
+    /// <summary>
+    /// Fills the screen with the video by hiding the chrome, rather than by reparenting anything:
+    /// the video is a native child window, and moving it between windows would detach the handle
+    /// and send libvlc back to opening its own window.
+    /// </summary>
+    private void ToggleFullScreen()
+    {
+        if (_engine?.Current is null && !_fullScreen) { SetStatus("nothing playing"); return; }
+
+        _fullScreen = !_fullScreen;
+
+        if (_fullScreen) ShowPage(Page.NowPlaying);
+
+        C<Border>("Sidebar").IsVisible = !_fullScreen;
+        C<Border>("PlayerBar").IsVisible = !_fullScreen;
+        C<Border>("NowHeader").IsVisible = !_fullScreen;
+
+        var frame = C<Border>("VideoFrame");
+        frame.Margin = _fullScreen ? new Thickness(0) : new Thickness(24, 0, 24, 18);
+        frame.CornerRadius = new CornerRadius(_fullScreen ? 0 : 10);
+        frame.BorderThickness = new Thickness(_fullScreen ? 0 : 1);
+
+        WindowState = _fullScreen ? WindowState.FullScreen : WindowState.Normal;
+
+        // The native window has to be handed the new geometry after the layout settles, and
+        // focus has to land somewhere still on screen.
+        Dispatcher.UIThread.Post(() =>
+        {
+            AttachVideoSurface();
+            FocusKeyboardAnchor();
+        }, DispatcherPriority.Background);
+
+        SetStatus(_fullScreen ? "full screen — Esc or Ctrl to exit" : "windowed");
+    }
 
     private void StartEngine()
     {
@@ -158,7 +302,7 @@ public partial class MainWindow : Window
         }
 
         _engine = new PlayerEngine(vlc, _library);
-        C<VideoView>("Video").MediaPlayer = _engine.Player;
+        // The player is deliberately NOT assigned to the VideoView here — see AttachVideoSurface.
 
         // Engine events arrive on libvlc threads; everything below touches the UI.
         _engine.Tick += () => Dispatcher.UIThread.Post(UpdatePlayerBar, DispatcherPriority.Background);
@@ -168,6 +312,49 @@ public partial class MainWindow : Window
             SetStatus("queue finished");
             InvalidateGrids();
         });
+    }
+
+    /// <summary>
+    /// Binds the player to the video surface, forcing VideoView to hand libvlc its window handle.
+    ///
+    /// VideoView only sets MediaPlayer.Hwnd when the player AND its native handle both exist, and
+    /// it only tries on Initialized or when the MediaPlayer property *changes*. The handle is not
+    /// created until the control is realised, which for a page that starts hidden is long after
+    /// the constructor runs — so assigning the player up front silently does nothing, libvlc is
+    /// left without a window to draw into, and it opens one of its own.
+    ///
+    /// Re-assigning the same instance is also a no-op, because the setter compares by reference.
+    /// Clearing first is what forces the attach. Hiding the page destroys the handle again
+    /// (DestroyNativeControlCore calls Detach), so this has to run every time the page is shown,
+    /// not once at startup.
+    /// </summary>
+    private void AttachVideoSurface()
+    {
+        if (_engine is null) return;
+
+        var view = C<VideoView>("Video");
+
+        // VideoView shows the transparent overlay that forwards pointer events only when its own
+        // IsVisible changes, and only evaluates effective visibility once, at attach time. Here
+        // it is an ancestor page that gets hidden, so neither ever fires and the overlay stays
+        // hidden — leaving clicks to land on the native window where Avalonia cannot see them.
+        // Toggling forces it to re-evaluate. This also recreates the native handle, so the
+        // player must be re-attached afterwards.
+        view.IsVisible = false;
+        view.IsVisible = true;
+
+        view.MediaPlayer = null;
+        view.MediaPlayer = _engine.Player;
+
+        // Proof the handle was actually handed over. Zero means VideoView had no native window
+        // to give, and libvlc will open a window of its own — the symptom this exists to prevent.
+        var handle = OperatingSystem.IsWindows()
+            ? _engine.Player.Hwnd
+            : (nint)_engine.Player.XWindow;
+
+        Log.Write(handle == 0
+            ? "video surface NOT attached (no native handle) - libvlc will open its own window"
+            : $"video surface attached, handle 0x{handle:X}");
     }
 
     // ------------------------------------------------------------------ loading
@@ -232,6 +419,22 @@ public partial class MainWindow : Window
     private void LoadFolder()
     {
         _locItems.Clear();
+
+        // A search spans every root, so it replaces the folder listing rather than filtering it.
+        var term = C<TextBox>("SearchBox").Text?.Trim() ?? "";
+        if (term.Length > 0)
+        {
+            foreach (var v in _library.Search(term)) _locItems.Add(new VideoRow(v));
+
+            C<TextBlock>("FolderTitle").Text = $"Search: {term}";
+            C<TextBlock>("FolderSubtitle").Text =
+                _locItems.Count == 0
+                    ? "nothing matched — searches file and folder names across every root"
+                    : $"{_locItems.Count} matches across every root";
+            C<Button>("RemoveRootButton").IsVisible = false;
+            return;
+        }
+
         if (_selectedFolder is null)
         {
             C<TextBlock>("FolderTitle").Text = "Select a folder";
@@ -252,6 +455,60 @@ public partial class MainWindow : Window
         C<Button>("RemoveRootButton").IsVisible = _selectedFolder.IsRoot;
     }
 
+    /// <summary>Renames the selected file on disk. Its history follows, because identity is the
+    /// content hash rather than the path.</summary>
+    private async void RenameSelected()
+    {
+        if (C<ListBox>("LocList").SelectedItem is not VideoRow row)
+        {
+            SetStatus("select a file to rename");
+            return;
+        }
+
+        var dialog = new RenameDialog(row.Name);
+        await dialog.ShowDialog(this);
+        if (dialog.NewName is not { } newName) return;
+
+        if (_library.RenameFile(row.Path, newName, out var error))
+        {
+            SetStatus($"renamed to '{newName}'");
+            LoadTree();
+            LoadFolder();
+        }
+        else
+        {
+            SetStatus($"rename failed: {error}");
+        }
+    }
+
+    /// <summary>Opens the containing folder with the file selected.</summary>
+    private void OnRevealClick(object? sender, RoutedEventArgs e)
+    {
+        if ((sender as Button)?.DataContext is not PathRow row) return;
+
+        try
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                // /select, highlights the file itself rather than just opening the folder.
+                Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{row.Path}\""));
+            }
+            else
+            {
+                // No portable "select the file" equivalent, so open the folder.
+                Process.Start(new ProcessStartInfo("xdg-open", Path.GetDirectoryName(row.Path) ?? row.Path)
+                {
+                    UseShellExecute = false,
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Write($"could not reveal {row.Path}", ex);
+            SetStatus($"could not open the folder: {ex.Message}");
+        }
+    }
+
     private void LoadTagChips()
     {
         var chips = C<ListBox>("TagChips");
@@ -259,6 +516,10 @@ public partial class MainWindow : Window
 
         _tagChips.Clear();
         foreach (var t in _library.GetTags()) _tagChips.Add(new TagRow(t));
+
+        // The tag box suggests everything already in use, so an existing tag can be picked
+        // rather than retyped (and mistyped into a near-duplicate).
+        C<AutoCompleteBox>("TagInput").ItemsSource = _tagChips.Select(c => c.Name).ToList();
 
         if (_tagChips.Count == 0) { _tagItems.Clear(); return; }
 
@@ -438,12 +699,21 @@ public partial class MainWindow : Window
         var first = queue.Current;
         if (first is null) return;
 
+        Log.Write($"play requested: index={index} of {items.Count} " +
+                  $"-> queue index {queue.Index}, '{first.DisplayName}'");
+
         // Show the video surface BEFORE starting playback. libvlc is handed the window handle
         // when the VideoView is realised; starting first meant there was nothing to hand it.
         C<ListBox>("Nav").SelectedIndex = (int)Page.NowPlaying;
 
-        // One dispatcher turn so the layout pass creates the native window first.
-        Dispatcher.UIThread.Post(() => _engine.Play(first, queue), DispatcherPriority.Background);
+        // One dispatcher turn so the layout pass creates the native window, then give libvlc
+        // that window before telling it to play.
+        Dispatcher.UIThread.Post(() =>
+        {
+            AttachVideoSurface();
+            _engine.Play(first, queue);
+            FocusKeyboardAnchor();
+        }, DispatcherPriority.Background);
     }
 
     private void Vote(int vote)
@@ -596,6 +866,27 @@ public partial class MainWindow : Window
         // other page regardless of visual-tree order.
         for (var i = 0; i < _pageGrids.Length; i++)
             _pageGrids[i].IsVisible = Pages[i].Page == page;
+
+        // The VideoView's visibility must track the page explicitly. Its pointer-forwarding
+        // overlay is a SEPARATE top-level window, and VideoView only hides that when its own
+        // IsVisible changes — hiding the page around it does not count. Left shown, the overlay
+        // stays stretched over the content area for the rest of the session, swallowing clicks
+        // on the video lists and holding the keyboard focus.
+        //
+        // This costs nothing extra: hiding the page already destroys the native handle, which is
+        // why AttachVideoSurface has to run again on every show.
+        C<VideoView>("Video").IsVisible = page == Page.NowPlaying;
+
+        // One dispatcher turn later the layout pass has created the native window, so the
+        // handle exists and can be handed to libvlc.
+        // Focus is re-parked here too: whatever had it — a video list, the tag box — lives on a
+        // page that has just been hidden, and a hidden element cannot hold focus.
+        if (page == Page.NowPlaying)
+            Dispatcher.UIThread.Post(() =>
+            {
+                AttachVideoSurface();
+                FocusKeyboardAnchor();
+            }, DispatcherPriority.Background);
 
         RefreshVisiblePage();
     }

@@ -1,0 +1,31 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Vcm.App.RenameDialog"
+        x:CompileBindings="True"
+        Width="560" SizeToContent="Height"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        Title="Rename file"
+        Background="{StaticResource Deep}"
+        FontFamily="Inter, Segoe UI, sans-serif">
+
+  <StackPanel Margin="24,20,24,20" Spacing="14">
+    <StackPanel Spacing="4">
+      <TextBlock Text="Rename file" Foreground="{StaticResource Text}"
+                 FontSize="16" FontWeight="SemiBold"/>
+      <TextBlock Text="The file is renamed on disk. Its ratings, watch time and tags follow it."
+                 Foreground="{StaticResource Faint}" FontSize="12" TextWrapping="Wrap"/>
+    </StackPanel>
+
+    <Border Background="#13161C" BorderBrush="{StaticResource Line}"
+            BorderThickness="1" CornerRadius="7" Padding="2">
+      <TextBox Name="NameBox" BorderThickness="0" Background="Transparent"
+               FontSize="13" Padding="10,8" Foreground="{StaticResource Text}"/>
+    </Border>
+
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+      <Button Name="CancelButton" Classes="tool" Content="Cancel"/>
+      <Button Name="OkButton" Classes="primary" Content="Rename"/>
+    </StackPanel>
+  </StackPanel>
+</Window>

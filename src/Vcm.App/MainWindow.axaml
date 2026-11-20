@@ -13,7 +13,7 @@
   <Grid RowDefinitions="*,Auto" ColumnDefinitions="214,*">
 
     <!-- SIDEBAR -->
-    <Border Grid.Row="0" Grid.Column="0" Background="{StaticResource Panel}"
+    <Border Grid.Row="0" Grid.Column="0" Name="Sidebar" Background="{StaticResource Panel}"
             BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
       <Grid RowDefinitions="Auto,Auto,*,Auto">
 
@@ -61,7 +61,7 @@
 
       <!-- NOW PLAYING -->
       <Grid Name="PageNowPlaying" IsVisible="False" RowDefinitions="Auto,*">
-        <Border Grid.Row="0" Padding="24,18,24,14">
+        <Border Grid.Row="0" Name="NowHeader" Padding="24,18,24,14">
           <StackPanel>
             <TextBlock Name="NowTitle" Text="Nothing playing" Foreground="{StaticResource Text}"
                        FontSize="17" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
@@ -70,12 +70,18 @@
                        TextTrimming="CharacterEllipsis"/>
           </StackPanel>
         </Border>
-        <Border Grid.Row="1" Margin="24,0,24,18" CornerRadius="10" Background="#07080A"
+        <Border Grid.Row="1" Name="VideoFrame" Focusable="True" Margin="24,0,24,18" CornerRadius="10" Background="#07080A"
                 BorderBrush="{StaticResource Line}" BorderThickness="1" ClipToBounds="True">
           <Panel>
             <TextBlock Name="VideoPlaceholder" Text="video surface" Foreground="#2A3040"
                        FontSize="13" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-            <vlc:VideoView Name="Video"/>
+            <vlc:VideoView Name="Video">
+              <!-- A transparent overlay. VideoView only forwards pointer events when it has
+                   Content, which it shows in a floating window above the native surface; without
+                   this, clicks land on the native window and Avalonia never sees them. -->
+              <Border Name="VideoOverlay" Background="Transparent"
+                      HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+            </vlc:VideoView>
           </Panel>
         </Border>
       </Grid>
@@ -117,8 +123,16 @@
             </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8"
                         VerticalAlignment="Center">
+              <Border Background="#13161C" BorderBrush="{StaticResource Line}" BorderThickness="1"
+                      CornerRadius="7" Padding="2" Width="220">
+                <TextBox Name="SearchBox" Watermark="Search all locations…" BorderThickness="0"
+                         Background="Transparent" FontSize="12.5" Padding="8,5"
+                         Foreground="{StaticResource Text}"/>
+              </Border>
               <CheckBox Name="RecursiveToggle" Content="Include subfolders"
                         Foreground="{StaticResource Dim}" FontSize="12"/>
+              <Button Name="RenameButton" Classes="tool" Content="Rename"
+                      ToolTip.Tip="Rename the selected file on disk (F2). Ratings and history follow it."/>
               <Button Name="RemoveRootButton" Classes="tool" Content="Remove root"/>
               <Button Name="PlayFolderButton" Classes="primary" Content="▶  Play all"/>
             </StackPanel>
@@ -317,10 +331,16 @@
                                FontSize="13.5" FontWeight="SemiBold"/>
                     <ItemsControl ItemsSource="{Binding Paths}" Margin="0,9,0,0">
                       <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="x:String">
-                          <TextBlock Text="{Binding}" Classes="cell dim" Margin="0,3"
-                                     FontFamily="Consolas,Menlo,monospace"
-                                     TextTrimming="CharacterEllipsis"/>
+                        <DataTemplate DataType="vm:PathRow">
+                          <Grid ColumnDefinitions="*,Auto" Margin="0,3">
+                            <TextBlock Grid.Column="0" Text="{Binding Path}" Classes="cell dim"
+                                       FontFamily="Consolas,Menlo,monospace"
+                                       TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                            <Button Grid.Column="1" Classes="tool" Content="Show in folder"
+                                    Padding="9,3" FontSize="11.5" Margin="10,0,0,0"
+                                    Click="OnRevealClick"
+                                    ToolTip.Tip="Open the containing folder with this file selected"/>
+                          </Grid>
                         </DataTemplate>
                       </ItemsControl.ItemTemplate>
                     </ItemsControl>
@@ -334,7 +354,7 @@
     </Panel>
 
     <!-- PLAYER BAR -->
-    <Border Grid.Row="1" Grid.ColumnSpan="2" Background="{StaticResource Panel}"
+    <Border Grid.Row="1" Grid.ColumnSpan="2" Name="PlayerBar" Background="{StaticResource Panel}"
             BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0">
       <Grid RowDefinitions="Auto,Auto" Margin="22,12,22,14">
 
@@ -346,6 +366,8 @@
             <Button Name="PrevButton" Classes="tool" Content="◀◀" Padding="11,6"/>
             <Button Name="PlayButton" Classes="primary" Content="▶" Padding="17,6"/>
             <Button Name="NextButton" Classes="tool" Content="▶▶" Padding="11,6"/>
+            <Button Name="FullScreenButton" Classes="tool" Content="⛶" Padding="11,6"
+                    ToolTip.Tip="Full screen (tap Ctrl, or double-click the video). Esc exits."/>
           </StackPanel>
 
           <TextBlock Grid.Column="1" Name="TimeText" Classes="num" Margin="14,0,0,0"
@@ -374,9 +396,11 @@
             </Button>
             <Border Background="#13161C" BorderBrush="{StaticResource Line}" BorderThickness="1"
                     CornerRadius="7" Padding="2" Width="190">
-              <TextBox Name="TagInput" Watermark="add tag…" BorderThickness="0"
-                       Background="Transparent" FontSize="12.5" Padding="8,5"
-                       Foreground="{StaticResource Text}"/>
+              <AutoCompleteBox Name="TagInput" Watermark="add or pick a tag…"
+                               BorderThickness="0" Background="Transparent" FontSize="12.5"
+                               Padding="8,5" Foreground="{StaticResource Text}"
+                               FilterMode="ContainsOrdinal" MinimumPrefixLength="0"
+                               ToolTip.Tip="Type a new tag, or start typing to pick an existing one. Enter applies it."/>
             </Border>
           </StackPanel>
 
